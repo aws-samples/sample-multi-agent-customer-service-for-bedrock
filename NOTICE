@@ -1,0 +1,12 @@
+Multi-Agent Customer Service Platform (Amazon Bedrock)
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This product includes software developed by Amazon.com, Inc. and its affiliates,
+distributed under the MIT No Attribution (MIT-0) license. See the LICENSE file.
+
+This sample uses the following third-party open-source components, each under its
+own license:
+  - aws-cdk-lib and constructs (Apache-2.0)
+  - cdklabs.generative-ai-cdk-constructs (Apache-2.0)
+  - boto3 / botocore (Apache-2.0)
+  - Streamlit (Apache-2.0)

@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# Multi-Agent Customer Service Platform — repository .gitignore
+# ---------------------------------------------------------------------------
+
+# Environment / secrets (never commit credentials, account ids or agent ids)
+.env
+.env.*
+!.env.example
+
+# CDK synthesis output and staging
+cdk.out/
+cdk.context.json
+*.cdk.staging/
+
+# Node (CDK CLI via npx)
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db

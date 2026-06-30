@@ -1,0 +1,73 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "requirements*.txt",
+      "source.bat",
+      "**/__pycache__",
+      "**/*.pyc",
+      ".venv",
+      "cdk.out"
+    ]
+  },
+  "context": {
+    "__customisation__": "App-level config for this sample. The defaults below deploy the fictional 'AnyCompany Energy' scenario. Override per-deploy with -c key=value, or edit the values here, to rebrand for your own company/industry (companyName/companyShortName/agentPrefix/stackName). NOTE: changing agentPrefix REPLACES the Bedrock agents and Knowledge Base (new ids) and requires re-running the KB ingestion job + updating the demo env vars.",
+    "stackName": "MultiAgentCustomerServiceStack",
+    "companyName": "AnyCompany Energy",
+    "companyShortName": "AnyCompany",
+    "agentPrefix": "anycompany",
+    "supervisorModelId": "anthropic.claude-opus-4-6-v1",
+    "specialistModelId": "anthropic.claude-sonnet-4-6",
+    "inferenceProfileGeo_note": "OPTIONAL / override-only. The cross-region inference-profile geo (US/EU/APAC) is auto-detected from the deploy region by default: us-* -> US, eu-*/me-*/af-* -> EU, ap-* -> APAC (unknown prefixes fall back to US). Only set inferenceProfileGeo here (or with -c inferenceProfileGeo=EU) to override the auto-detection for an edge case. NOTE: US and EU Claude 4.x profiles exist today; an apac.* profile for Claude Opus/Sonnet 4.6 is not yet published (see README 'Supported regions').",
+    "kbBucket_note": "By default the stack creates its own S3 bucket and uploads the sample knowledge-base/*.md docs. To point the Knowledge Base at a bucket you already own, set existingKnowledgeBaseBucketArn (see example). When set, the stack skips bucket creation + sample upload and indexes your bucket; you must upload your docs and run the KB ingestion job yourself.",
+    "region_note": "Region is resolved as: -c region=<X>  >  CDK_DEFAULT_REGION (from your AWS profile)  >  us-east-1. It is intentionally NOT pinned here so it follows your credentials by default. The cross-region inference-profile geo is auto-detected from this region (see inferenceProfileGeo_note). US and EU regions work today; APAC is not yet supported for Claude 4.6 (see README 'Supported regions').",
+    "dailyCostAlarmUsd": 10,
+    "projectTag": "anycompany-agentic-customer-service",
+    "ownerTag": "anycompany-energy-cx",
+    "otelLayerArn": "",
+    "__customisation_example__": {
+      "comment": "Example overrides for a different company/industry/region. Copy these into the keys above (or pass with -c) to rebrand. These keys are ignored by CDK; they are documentation only.",
+      "region": "us-west-2",
+      "inferenceProfileGeo": "US",
+      "existingKnowledgeBaseBucketArn": "arn:aws:s3:::my-existing-kb-bucket",
+      "stackName": "MultiAgentCustomerServiceStack",
+      "companyName": "Acme Telecom",
+      "companyShortName": "Acme",
+      "agentPrefix": "acme",
+      "supervisorModelId": "anthropic.claude-opus-4-6-v1",
+      "specialistModelId": "anthropic.claude-sonnet-4-6",
+      "otelLayerArn_note": "Account 901920570463 in the ARN below is the PUBLIC AWS-managed ADOT (AWS Distro for OpenTelemetry) layer account, not a personal account. See https://aws-otel.github.io/docs/getting-started/lambda.",
+      "otelLayerArn": "arn:aws:lambda:us-east-1:901920570463:layer:aws-otel-python-amd64-ver-1-29-0:1"
+    },
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": [
+      "aws",
+      "aws-cn"
+    ],
+    "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,
+    "@aws-cdk/aws-ec2:uniqueImdsv2TemplateName": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:validateSnapshotRemovalPolicy": true,
+    "@aws-cdk/aws-codepipeline:crossAccountKeyAliasStackSafeResourceName": true,
+    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
+    "@aws-cdk/aws-sns-subscriptions:restrictSqsDescryption": true,
+    "@aws-cdk/aws-apigateway:disableCloudWatchRole": true,
+    "@aws-cdk/core:enablePartitionLiterals": true,
+    "@aws-cdk/aws-events:eventsTargetQueueSameAccount": true,
+    "@aws-cdk/aws-iam:standardizedServicePrincipals": true,
+    "@aws-cdk/aws-ecs:disableExplicitDeploymentControllerForCircuitBreaker": true,
+    "@aws-cdk/aws-iam:importedRoleStackSafeDefaultPolicyName": true,
+    "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true,
+    "@aws-cdk/aws-route53-patters:useCertificate": true,
+    "@aws-cdk/customresources:installLatestAwsSdkDefault": false,
+    "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
+    "@aws-cdk/core:newStyleStackSynthesis": true,
+    "@aws-cdk/core:stackRelativeExports": true
+  }
+}

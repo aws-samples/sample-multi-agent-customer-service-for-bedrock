@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# AnyCompany Energy - Agentic Customer Service / CDK infrastructure .gitignore
+# ---------------------------------------------------------------------------
+
+# CDK synthesis output and staging
+cdk.out/
+cdk.context.json
+*.cdk.staging/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Lambda layer build artefacts (the layer is built from ../lambdas/common at synth time)
+lambdas/**/build/
+lambdas/**/.tox/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local environment overrides (never commit credentials / account ids)
+.env
+.env.*

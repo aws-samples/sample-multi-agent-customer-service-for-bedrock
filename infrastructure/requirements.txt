@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------------------
+# Runtime dependencies for the AnyCompany Energy agentic customer-service CDK app.
+#
+# These versions were validated against the API surface used in
+# stacks/customer_service_stack.py. If you upgrade cdklabs.generative-ai-cdk-
+# constructs, re-verify the bedrock.Agent / AgentActionGroup / VectorKnowledgeBase
+# signatures, because that library is pre-1.0 and the API can shift between
+# minor releases.
+# ---------------------------------------------------------------------------
+
+# AWS CDK v2 core library (L1/L2 constructs, including aws_cdk.aws_bedrock L1s).
+aws-cdk-lib>=2.160.0,<3.0.0
+
+# Constructs programming model (peer dependency of aws-cdk-lib).
+constructs>=10.0.0,<11.0.0
+
+# Generative AI CDK constructs from cdklabs: provides the higher-level
+# bedrock.Agent, bedrock.AgentActionGroup, bedrock.VectorKnowledgeBase,
+# bedrock.S3DataSource, bedrock.AgentAlias and multi-agent-collaboration
+# constructs used throughout the stack. This library is pre-1.0 and its
+# experimental Bedrock API can shift between patch releases, so it is pinned to
+# the EXACT version the stack was validated against for reproducible synthesis.
+# If you bump this, re-verify the Agent / AgentActionGroup / VectorKnowledgeBase
+# / ActionGroupExecutor.fromlambda_function API used in the stack.
+cdklabs.generative-ai-cdk-constructs==0.1.318

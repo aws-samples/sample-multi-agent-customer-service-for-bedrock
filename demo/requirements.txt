@@ -1,0 +1,4 @@
+# Streamlit demo frontend for the AnyCompany Energy agentic customer service system.
+# Pinned to compatible minimum versions; install with: pip install -r requirements.txt
+streamlit>=1.36,<2.0
+boto3>=1.34.0,<2.0.0
