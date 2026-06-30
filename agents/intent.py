@@ -1,19 +1,16 @@
-"""Intent Router action-group Lambda for the AnyCompany supervisor agent.
+"""Keyword-scoring intent classifier for the supervisor agent.
 
-Implements the ``intent-classification`` action group with a single function,
-``classify_intent``. It uses a transparent keyword/heuristic scoring model to
-classify an inbound customer query into one of four intents and recommends the
-specialist collaborator agent that should handle it.
+This is the same transparent keyword/heuristic scorer used in the original
+sample (carried over verbatim from the Bedrock action-group implementation), now
+exposed as a plain function and a Strands ``@tool``. The supervisor calls it to
+obtain an explicit, auditable classification (intent + confidence + reasoning)
+which both guides routing and powers the demo's live timeline.
 
 Intents:
-    BILLING     -> anycompany-billing-agent
-    SCHEDULING  -> anycompany-scheduling-agent
-    ESCALATION  -> anycompany-escalation-agent
+    BILLING     -> billing_specialist
+    SCHEDULING  -> scheduling_specialist
+    ESCALATION  -> escalation_specialist
     UNKNOWN     -> (no confident routing; ask the customer to clarify)
-
-The supervisor (multi-agent collaboration SUPERVISOR_ROUTER) can use this as an
-explicit pre-routing signal; the function is also useful for analytics and for
-deterministic behaviour in the demo.
 """
 
 from __future__ import annotations
@@ -21,23 +18,20 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Tuple
-
-from bedrock_agent import build_response, dispatch
+from typing import Dict, List, Tuple
 
 logger: logging.Logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # Minimum normalized score required to commit to an intent. Anything below this
 # threshold is treated as UNKNOWN so the supervisor can ask for clarification.
 CONFIDENCE_THRESHOLD: float = 0.34
 
-# Maps each intent to the collaborator agent name configured in the CDK stack.
+# Maps each intent to the specialist tool the supervisor should call.
 RECOMMENDED_AGENT_BY_INTENT: Dict[str, str] = {
-    "BILLING": "anycompany-billing-agent",
-    "SCHEDULING": "anycompany-scheduling-agent",
-    "ESCALATION": "anycompany-escalation-agent",
-    "UNKNOWN": "anycompany-intent-router",
+    "BILLING": "billing_specialist",
+    "SCHEDULING": "scheduling_specialist",
+    "ESCALATION": "escalation_specialist",
+    "UNKNOWN": "clarify",
 }
 
 # Weighted keyword vocabularies per intent. Multi-word phrases are checked as
@@ -124,9 +118,7 @@ def _score_text(text: str) -> Dict[str, float]:
     """Compute a raw keyword-match score for each intent category.
 
     Multi-word keywords are matched as case-insensitive substrings; single
-    tokens are matched on word boundaries to avoid spurious partial matches
-    (e.g. "pay" should not fire inside "payment" twice, and "leak" should not
-    fire inside unrelated words).
+    tokens are matched on word boundaries to avoid spurious partial matches.
 
     Args:
         text: The customer query text.
@@ -148,6 +140,28 @@ def _score_text(text: str) -> Dict[str, float]:
                 if re.search(pattern, lowered):
                     scores[intent] += weight
     return scores
+
+
+def _matched_keywords(text: str) -> Dict[str, List[str]]:
+    """Return, per intent, the list of keywords that matched the text.
+
+    Args:
+        text: The customer query text.
+
+    Returns:
+        A mapping of intent name to the list of matched keywords.
+    """
+    lowered = (text or "").lower()
+    matched: Dict[str, List[str]] = {intent: [] for intent in KEYWORD_WEIGHTS}
+    for intent, vocabulary in KEYWORD_WEIGHTS.items():
+        for keyword in vocabulary:
+            if " " in keyword:
+                if keyword in lowered:
+                    matched[intent].append(keyword)
+            else:
+                if re.search(r"\b" + re.escape(keyword) + r"\b", lowered):
+                    matched[intent].append(keyword)
+    return matched
 
 
 def _build_reasoning(
@@ -184,29 +198,7 @@ def _build_reasoning(
     )
 
 
-def _matched_keywords(text: str) -> Dict[str, List[str]]:
-    """Return, per intent, the list of keywords that matched the text.
-
-    Args:
-        text: The customer query text.
-
-    Returns:
-        A mapping of intent name to the list of matched keywords.
-    """
-    lowered = (text or "").lower()
-    matched: Dict[str, List[str]] = {intent: [] for intent in KEYWORD_WEIGHTS}
-    for intent, vocabulary in KEYWORD_WEIGHTS.items():
-        for keyword in vocabulary:
-            if " " in keyword:
-                if keyword in lowered:
-                    matched[intent].append(keyword)
-            else:
-                if re.search(r"\b" + re.escape(keyword) + r"\b", lowered):
-                    matched[intent].append(keyword)
-    return matched
-
-
-def _classify(query: str) -> Tuple[str, float, str]:
+def classify(query: str) -> Tuple[str, float, str]:
     """Classify a query into an intent with a normalized confidence score.
 
     Confidence is the winning intent's share of the total score across all
@@ -242,71 +234,47 @@ def _classify(query: str) -> Tuple[str, float, str]:
     return top_intent, confidence, reasoning
 
 
-def classify_intent(parameters: Dict[str, str]) -> str:
-    """Classify a customer query and recommend the specialist agent.
+def classify_intent_payload(query: str) -> Dict[str, object]:
+    """Classify a customer query and return the full structured result.
 
     Args:
-        parameters: Resolved action-group parameters. Requires ``query``.
+        query: The customer's raw question or request.
 
     Returns:
-        A compact JSON string with ``intent``, ``confidence``,
-        ``recommended_agent`` and ``reasoning``.
+        A dict with ``intent``, ``confidence``, ``recommended_agent`` and
+        ``reasoning``.
     """
-    query = parameters.get("query", "").strip()
-    if not query:
-        logger.warning("classify_intent invoked without a 'query' parameter")
-        return json.dumps(
-            {
-                "intent": "UNKNOWN",
-                "confidence": 0.0,
-                "recommended_agent": RECOMMENDED_AGENT_BY_INTENT["UNKNOWN"],
-                "reasoning": (
-                    "No query text was supplied, so the intent cannot be "
-                    "determined. Ask the customer what they need help with."
-                ),
-            }
-        )
+    text = (query or "").strip()
+    if not text:
+        logger.warning("classify_intent invoked without query text")
+        return {
+            "intent": "UNKNOWN",
+            "confidence": 0.0,
+            "recommended_agent": RECOMMENDED_AGENT_BY_INTENT["UNKNOWN"],
+            "reasoning": (
+                "No query text was supplied, so the intent cannot be determined. "
+                "Ask the customer what they need help with."
+            ),
+        }
 
-    intent, confidence, reasoning = _classify(query)
+    intent, confidence, reasoning = classify(text)
     result = {
         "intent": intent,
         "confidence": confidence,
         "recommended_agent": RECOMMENDED_AGENT_BY_INTENT[intent],
         "reasoning": reasoning,
     }
-    logger.info(
-        "Classified query as %s (confidence=%.2f)", intent, confidence
-    )
-    return json.dumps(result)
+    logger.info("Classified query as %s (confidence=%.2f)", intent, confidence)
+    return result
 
 
-# Map of function name -> handler callable for this action group.
-HANDLERS: Dict[str, Any] = {
-    "classify_intent": classify_intent,
-}
-
-
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """AWS Lambda entry point for the intent-classification action group.
+def classify_intent_json(query: str) -> str:
+    """Convenience wrapper returning the classification as a compact JSON string.
 
     Args:
-        event: The Bedrock action-group invocation event.
-        context: The Lambda runtime context (unused).
+        query: The customer's raw question or request.
 
     Returns:
-        A valid Bedrock action-group response envelope.
+        A compact JSON string of the classification payload.
     """
-    logger.info("intent_router received function '%s'", event.get("function"))
-    try:
-        return dispatch(event, HANDLERS)
-    except Exception as error:  # noqa: BLE001 - never crash the agent.
-        logger.exception("Unhandled error in intent_router: %s", error)
-        return build_response(
-            event,
-            json.dumps(
-                {
-                    "error": "ROUTER_ERROR",
-                    "message": "Intent classification failed unexpectedly.",
-                }
-            ),
-        )
+    return json.dumps(classify_intent_payload(query))

@@ -1,12 +1,14 @@
 """In-memory mock datastore for the AnyCompany Energy customer-service demo.
 
-This module is packaged into the shared Lambda layer (the ``python`` directory)
-and imported by the billing, scheduling, and escalation action-group handlers.
+This module holds the deterministic business logic (accounts, appointment slot
+ids, tickets, simulated Amazon Connect transfers) imported by the Strands
+``@tool`` functions in :mod:`agents.tools`. The logic is unchanged from the
+original sample.
 
 Everything here is deliberately *deterministic*: booking references, ticket
 ids, and transfer/contact ids are derived from the function inputs plus a
 monotonic module-level counter, so the demo behaves predictably and the
-``demo-script.md`` walkthrough always reproduces the same results.
+``testing-guide.md`` scenarios always reproduce the same results.
 
 There is intentionally no persistence and no randomness. The "datastore" is a
 set of module-level dictionaries seeded with three fixed sample accounts that

@@ -3,48 +3,47 @@
 > A public AWS sample. The scenario — **AnyCompany Energy**, a fictional UK
 > utility — is illustrative only; all names and data are synthetic.
 
-This document describes the system architecture, the multi-agent collaboration
-pattern, the request and RAG data flows, the security/IAM model, and the
-cost/ROI business case.
+This document describes the system architecture, the agents-as-tools multi-agent
+pattern, the request and RAG data flows, the security model, and the cost/ROI
+business case.
 
 ---
 
 ## 1. System Overview
 
 AnyCompany Energy fields roughly **12,000 customer interactions per month** at a
-fully-loaded handling cost of **GBP 8.50 per interaction**. The objective of
-this sample is to demonstrate an **agentic AI system** that automates the
-end-to-end service journey — service triage → billing → scheduling →
-escalation — and that can credibly remove **40–60%** of that handling cost.
+fully-loaded handling cost of **GBP 8.50 per interaction**. The objective of this
+sample is to demonstrate an **agentic AI system** that automates the end-to-end
+service journey — service triage → billing → scheduling → escalation — and that
+can credibly remove **40–60%** of that handling cost.
 
-The system is built on **Amazon Bedrock Agents** using a **supervisor /
-multi-agent collaboration** topology. A single supervisor agent (the *Intent
-Router*) classifies each customer query and routes it to one of three
-specialist collaborator agents, each backed by its own action-group Lambda. A
-**Bedrock Knowledge Base** (backed by Amazon S3 and an Amazon OpenSearch
-Serverless vector index) provides Retrieval-Augmented Generation (RAG) for the
-Billing and Escalation agents so they can answer policy/tariff questions and
-quote authoritative contact details grounded in AnyCompany's published documents.
-A **Streamlit** application provides an interactive demo UI
-that invokes the supervisor agent and renders a live routing/tool timeline.
+The system is built with the **Strands Agents SDK** on **Amazon Bedrock**, using
+the **agents-as-tools** multi-agent pattern. A single supervisor agent (the
+*Intent Router*) classifies each customer query and routes it to one of three
+specialist agents, each of which is itself a Strands `Agent` exposed to the
+supervisor as a callable tool. A **Bedrock Knowledge Base** (Amazon S3 + Amazon
+OpenSearch Serverless) provides Retrieval-Augmented Generation (RAG) for the
+billing and escalation specialists. A **Streamlit** app runs the agents in process
+and renders a live routing/tool timeline from the Strands callback stream.
+
+Because the orchestration is plain Python on Strands (not the Bedrock Agents
+classic multi-agent collaboration API), the exact same code runs locally and
+deploys to **Amazon Bedrock AgentCore Runtime** for production scale.
 
 Agents use a **tiered foundation-model strategy**:
 
 - **Supervisor / intent router** — **Anthropic Claude Opus 4.6**
-  (`anthropic.claude-opus-4-6-v1`), for the strongest routing and multi-intent
-  reasoning at the front door, where classification quality drives every
-  downstream decision.
+  (`anthropic.claude-opus-4-6-v1`), for the strongest routing/multi-intent
+  reasoning at the front door.
 - **Specialist agents** (billing, scheduling, escalation) — **Anthropic Claude
   Sonnet 4.6** (`anthropic.claude-sonnet-4-6`), for fast, cost-efficient tool
-  execution within a narrow, well-defined scope.
+  execution within a narrow scope.
 
-Both Claude 4.6 models are invoked via **US cross-region inference profiles**
-(`us.anthropic.claude-opus-4-6-v1` / `us.anthropic.claude-sonnet-4-6`) rather than
-their bare model ids: Claude 4.x does not support on-demand invocation by bare id,
-so the stack wraps each base model in a `CrossRegionInferenceProfile` (which also
-provisions the matching cross-region `bedrock:InvokeModel` IAM grants).
-
-The Knowledge Base uses **Amazon Titan Text Embeddings V2** for vectorisation.
+Both Claude 4.6 models are invoked via **cross-region inference profiles**
+(`us.anthropic.*` / `eu.anthropic.*`) because Claude 4.x cannot be invoked
+on-demand by bare model id. The geo prefix is auto-detected from the deploy
+region (`agents/config.py`). The Knowledge Base uses **Amazon Titan Text
+Embeddings V2**.
 
 ---
 
@@ -52,152 +51,131 @@ The Knowledge Base uses **Amazon Titan Text Embeddings V2** for vectorisation.
 
 ```mermaid
 flowchart TB
-    subgraph Client["Demo Client"]
-        UI["Streamlit Demo<br/>demo/app.py<br/>(chat UI + routing timeline)"]
+    subgraph Client["Demo / Runtime"]
+        UI["Streamlit demo (demo/app.py)<br/>runs agents in process<br/>+ live timeline from Strands callbacks"]
     end
 
-    subgraph Bedrock["Amazon Bedrock Agents"]
-        SUP["anycompany-intent-router<br/><b>SUPERVISOR_ROUTER</b><br/>Claude Opus 4.6"]
+    subgraph App["Strands Agents app (agents/)"]
+        SUP["Supervisor / intent router<br/>Claude Opus 4.6<br/>tools: classify_intent + 3 specialists"]
 
-        subgraph Specialists["Specialist Collaborator Agents"]
-            BILL["anycompany-billing-agent<br/>Claude Sonnet 4.6"]
-            SCHED["anycompany-scheduling-agent<br/>Claude Sonnet 4.6"]
-            ESC["anycompany-escalation-agent<br/>Claude Sonnet 4.6"]
+        subgraph Specialists["Specialist agents (as tools)"]
+            BILL["Billing agent<br/>Claude Sonnet 4.6<br/>lookup_account, check_balance, retrieve"]
+            SCHED["Scheduling agent<br/>Claude Sonnet 4.6<br/>check_availability, book_appointment, cancel_appointment"]
+            ESC["Escalation agent<br/>Claude Sonnet 4.6<br/>create_ticket, transfer_to_agent, retrieve"]
         end
-    end
 
-    subgraph Lambdas["Action-Group Lambdas (Python 3.12)"]
-        LR["intent_router<br/>classify_intent"]
-        LB["billing_tools<br/>lookup_account<br/>check_balance"]
-        LS["scheduling_tools<br/>check_availability<br/>book_appointment<br/>cancel_appointment"]
-        LE["escalation_tools<br/>create_ticket<br/>transfer_to_agent"]
+        DATA["mock_data.py<br/>(deterministic datastore)"]
     end
 
     subgraph KB["Knowledge Base (RAG)"]
         BKB["Bedrock Knowledge Base"]
-        OSS["OpenSearch Serverless<br/>Vector Index<br/>(Titan Embed Text V2)"]
+        OSS["OpenSearch Serverless<br/>Vector Index (Titan V2)"]
         S3["S3: KnowledgeBaseDocsBucket<br/>billing-faqs / tariff-guide /<br/>policies / service-procedures"]
     end
 
-    LAYER["Shared Lambda Layer<br/>bedrock_agent.py + mock_data.py"]
+    GUARD["Bedrock Guardrail<br/>(applied on every model call)"]
 
-    UI -->|invoke_agent enableTrace=True| SUP
-    SUP -->|action group: intent-classification| LR
-    SUP -->|collaborator routing| BILL
-    SUP -->|collaborator routing| SCHED
-    SUP -->|collaborator routing| ESC
+    UI -->|supervisor(query) / stream_async| SUP
+    SUP -->|classify_intent| SUP
+    SUP -->|billing_specialist tool| BILL
+    SUP -->|scheduling_specialist tool| SCHED
+    SUP -->|escalation_specialist tool| ESC
 
-    BILL -->|action group: billing-tools| LB
-    SCHED -->|action group: scheduling-tools| LS
-    ESC -->|action group: escalation-tools| LE
-
-    BILL -.->|RAG retrieve| BKB
-    ESC -.->|RAG retrieve| BKB
+    BILL -->|retrieve| BKB
+    ESC -->|retrieve| BKB
     BKB --> OSS
-    S3 -->|ingestion job| OSS
+    S3 -->|sync / ingestion| OSS
 
-    LR -.-> LAYER
-    LB -.-> LAYER
-    LS -.-> LAYER
-    LE -.-> LAYER
+    BILL -.-> DATA
+    SCHED -.-> DATA
+    ESC -.-> DATA
 
-    SUP -->|completion stream + trace| UI
+    GUARD -.-> SUP & BILL & SCHED & ESC
 ```
 
 ---
 
 ## 3. Components
 
-### 3.1 Supervisor — Intent Router (`anycompany-intent-router`)
-- Configured with `agentCollaboration = SUPERVISOR_ROUTER`.
-- Owns the **`intent-classification`** action group, backed by the
-  `lambdas/intent_router` Lambda. The `classify_intent(query)` function uses a
-  deterministic keyword/heuristic scoring model across three intent categories
-  (BILLING, SCHEDULING, ESCALATION) and returns
+### 3.1 Supervisor — Intent Router (`agents/supervisor.py`)
+- A Strands `Agent` (Claude Opus 4.6) whose tools are `classify_intent` plus the
+  three specialist agents wrapped as tools (`billing_specialist`,
+  `scheduling_specialist`, `escalation_specialist`).
+- `classify_intent` (`agents/intent.py`) uses a deterministic keyword/heuristic
+  scorer across BILLING / SCHEDULING / ESCALATION and returns
   `{intent, confidence, recommended_agent, reasoning}`. A normalised top score
-  below `0.34` yields `UNKNOWN`.
-- Has the three specialist agents attached as **collaborators**, each with a
-  clear collaboration instruction describing when to route to it.
-- The supervisor synthesises the final natural-language answer to the customer
-  from the collaborator's response.
+  below **0.34** yields UNKNOWN, and the supervisor asks a clarifying question.
+- The supervisor routes by **calling the matching specialist tool** and
+  synthesises the specialists' output into one customer-facing reply.
 
-### 3.2 Billing agent (`anycompany-billing-agent`) — RAG-enabled
-- Action group **`billing-tools`** → `lambdas/billing_tools`:
-  - `lookup_account(account_number)` — returns account profile
-    (name, tariff, status, postcode, on_payment_plan).
-  - `check_balance(account_number)` — returns
-    `{account_number, balance_gbp, due_date, last_payment, status}`.
-- **Attached to the Knowledge Base** so it can answer tariff/policy/billing
-  questions with grounded citations (RAG).
+### 3.2 Billing agent (`agents/specialists.py`) — RAG-enabled
+- Tools: `lookup_account(account_number)` (profile), `check_balance(account_number)`
+  (`balance_gbp`, `due_date`, `last_payment`, `status`), and `retrieve` (RAG).
+- Uses the Knowledge Base (via `retrieve`) for tariff/policy/billing questions.
 
-### 3.3 Scheduling agent (`anycompany-scheduling-agent`)
-- Action group **`scheduling-tools`** → `lambdas/scheduling_tools`:
-  - `check_availability(appointment_type, postcode, preferred_date?)` — returns
-    a list of slots. `appointment_type` ∈
-    {`METER_READING`, `ENGINEER_VISIT`, `LEAK_INVESTIGATION`, `EV_CHARGER_INSTALL`}.
-  - `book_appointment(account_number, slot_id, contact_phone)` — returns a
-    confirmed booking (`booking_reference` `APPT-######`).
-  - `cancel_appointment(booking_reference)` — cancels a booking.
+### 3.3 Scheduling agent (`agents/specialists.py`)
+- Tools: `check_availability(appointment_type, postcode, preferred_date?)`,
+  `book_appointment(account_number, slot_id, contact_phone)` (`APPT-######`),
+  `cancel_appointment(booking_reference)`. `appointment_type` ∈ {`METER_READING`,
+  `ENGINEER_VISIT`, `LEAK_INVESTIGATION`, `EV_CHARGER_INSTALL`}.
 
-### 3.4 Escalation agent (`anycompany-escalation-agent`)
-- Action group **`escalation-tools`** → `lambdas/escalation_tools`:
-  - `create_ticket(account_number, issue_summary, category, priority?)` — opens
-    a ticket (`ticket_id` `TKT-######`) and maps category/priority to
-    `sla_hours` (VULNERABILITY/CRITICAL → 2, HIGH → 8, MEDIUM → 24, LOW → 72).
-    `category` ∈ {`BILLING_DISPUTE`, `SUPPLY_ISSUE`, `COMPLAINT`,
-    `VULNERABILITY`, `OTHER`}.
-  - `transfer_to_agent(ticket_id, reason, account_number?)` — simulates an
-    **Amazon Connect** handoff, inferring queue/team from the reason text and
-    returning a `connect_contact_id` (`CT-` + 8 hex-ish chars).
-- **Attached to the Knowledge Base** so it can quote authoritative redress-scheme
-  contact details (Energy Ombudsman / CCW) and complaints-policy specifics from
-  the published documents, rather than inventing phone numbers, emails or URLs.
+### 3.4 Escalation agent (`agents/specialists.py`) — RAG-enabled
+- Tools: `create_ticket(account_number, issue_summary, category, priority?)`
+  (`TKT-######`; category/priority → `sla_hours`, with VULNERABILITY/CRITICAL → 2,
+  HIGH → 8, MEDIUM → 24, LOW → 72), `transfer_to_agent(ticket_id, reason,
+  account_number?)` (simulated **Amazon Connect** handoff, queue/team inferred
+  from the reason, `connect_contact_id` `CT-` + 8 hex), and `retrieve` (RAG) for
+  authoritative redress-scheme contacts (Energy Ombudsman / CCW).
 
-### 3.5 Shared Lambda layer
-Both `lambdas/common/python/bedrock_agent.py` (Bedrock action-group request /
-response helpers and a `dispatch` router) and
-`lambdas/common/python/mock_data.py` (in-memory mock datastore with the fixed
-sample accounts) are packaged as a **Lambda layer** attached to all four
-Lambdas. Handlers import shared helpers as `from bedrock_agent import ...`.
+### 3.5 Tools & datastore (`agents/tools.py`, `agents/mock_data.py`)
+The `@tool` functions are plain Python (no Lambda packaging) that delegate to the
+deterministic in-memory datastore in `agents/mock_data.py`. Slot ids, booking
+references, ticket ids and transfer ids are derived deterministically so the
+`testing-guide.md` scenarios reproduce the same *shapes* every run.
 
-### 3.6 Knowledge Base + storage
-- **S3 bucket** (`KnowledgeBaseDocsBucket`) holds the four markdown documents
-  deployed from `knowledge-base/` via `aws_s3_deployment.BucketDeployment`.
-- **Bedrock Knowledge Base** chunks and embeds those documents with **Titan
-  Text Embeddings V2** and stores vectors in an **OpenSearch Serverless** vector
-  index (provisioned automatically by `cdklabs.generative-ai-cdk-constructs`).
-- An **ingestion job** must be started after deployment to populate the index
-  (see `docs/README.md`).
+### 3.6 Guardrail (`agents/config.py` + CDK)
+The Bedrock Guardrail is provisioned by the CDK stack and applied on **every**
+model invocation via the Strands `BedrockModel` (`guardrail_id` /
+`guardrail_version`) — content filters, `FINANCIAL_ADVICE` denied topic, PII
+ANONYMIZE (phone/email/card/sort-code), prompt-attack detection, and contextual
+grounding (detect-only at 0.7). Soft, authorization-aware policy (competitors,
+other customers' data) is enforced via the agent system prompts.
 
-### 3.7 Demo UI
-`demo/app.py` (Streamlit) calls
-`bedrock-agent-runtime.invoke_agent(..., enableTrace=True)` against the
-supervisor alias, accumulates the `completion` event stream into the final
-answer, and parses the trace stream to render a routing/tool timeline.
+### 3.7 Knowledge Base + storage (CDK)
+- **S3 bucket** holds the four markdown documents (deployed via
+  `BucketDeployment`).
+- **Bedrock Knowledge Base** chunks (fixed-size 500 tokens / 20% overlap) and
+  embeds them with **Titan V2** into an **OpenSearch Serverless** vector index
+  (provisioned by `cdklabs.generative-ai-cdk-constructs`).
+- A **sync** (ingestion) is run after deploy to populate the index (console →
+  Knowledge Base → data source → **Sync**).
+
+### 3.8 Runtime
+- **Demo:** `demo/app.py` imports `agents.supervisor.build_supervisor`, runs the
+  supervisor in process, and uses a shared Strands **callback handler** to render
+  the per-turn routing/tool timeline.
+- **Production:** the same supervisor deploys to **Amazon Bedrock AgentCore
+  Runtime** via a thin `@app.entrypoint` wrapper (see the README "Production
+  deployment").
 
 ---
 
-## 4. Request Flow (multi-agent collaboration)
+## 4. Request Flow (agents as tools)
 
-1. The customer types a message in the Streamlit chat. The app calls
-   `invoke_agent` on the **supervisor alias** with a stable `sessionId` and
-   `enableTrace=True`.
-2. The supervisor's **routing classifier** (and the `intent-classification`
-   action group) determine the intent and select the appropriate collaborator.
-   The supervisor emits a `routingClassifierTrace` / `rationale`.
-3. The supervisor delegates to the chosen specialist via an
-   `agentCollaboratorInvocationInput` (visible in the trace as
-   *Routed to: `<agent>`*).
-4. The specialist agent decides which tool(s) to call. Each tool call is an
-   `actionGroupInvocationInput` (action group name, function, parameters) and
-   invokes the corresponding Lambda. The Lambda returns a
-   `functionResponse.responseBody.TEXT.body` string (compact JSON where
-   structured).
-5. The specialist composes a response from the tool output(s); the supervisor
-   synthesises the final customer-facing answer.
-6. The Streamlit app streams the answer to the chat and renders the timeline:
-   which collaborator handled the query, every tool invocation with parameters
-   and results, and the supervisor rationale.
+1. The customer types a message. The demo calls `supervisor(message)` (or
+   `supervisor.stream_async(message)` for streaming).
+2. The supervisor calls `classify_intent` to get an explicit intent + confidence
+   + reasoning.
+3. The supervisor **calls the matching specialist tool** (e.g.
+   `billing_specialist`). Internally that invokes the specialist `Agent`, which
+   runs its own tool loop (e.g. `check_balance`, or `retrieve` for RAG).
+4. The specialist returns its answer to the supervisor as the tool result.
+5. The supervisor synthesises the final customer-facing reply.
+6. The Strands callback handler captures the whole nested timeline (classify →
+   route → specialist tool calls + results), which the Streamlit sidebar renders.
+
+For low-confidence/UNKNOWN input the supervisor does not route and instead asks a
+clarifying question.
 
 ---
 
@@ -206,58 +184,51 @@ answer, and parses the trace stream to render a routing/tool timeline.
 ```mermaid
 sequenceDiagram
     participant U as Customer (Streamlit)
-    participant S as Supervisor (Intent Router)
-    participant B as Billing Agent
+    participant S as Supervisor
+    participant B as Billing agent (tool)
     participant KB as Knowledge Base
     participant OSS as OpenSearch Serverless
 
     U->>S: "What is the Economy 7 tariff?"
     S->>S: classify_intent -> BILLING
-    S->>B: route (collaborator)
+    S->>B: call billing_specialist tool
     B->>KB: retrieve("Economy 7 tariff")
     KB->>OSS: vector search (Titan V2 embedding)
     OSS-->>KB: top-k matching chunks
-    KB-->>B: passages from tariff-guide.md (+ citations)
+    KB-->>B: passages from tariff-guide.md
     B-->>S: grounded answer
-    S-->>U: final answer + sources
+    S-->>U: final answer
 ```
 
-**Ingestion (one-time / on document change):** S3 documents →
-`start-ingestion-job` → Bedrock chunks each markdown file → Titan V2 embeds each
-chunk → vectors written to the OpenSearch Serverless index. At query time the
-Billing agent retrieves the most relevant chunks and grounds its answer in them,
-reducing hallucination and ensuring answers match AnyCompany's published policy.
+**Ingestion (one-time / on document change):** S3 documents → Knowledge Base
+**Sync** → Bedrock chunks each markdown file → Titan V2 embeds each chunk →
+vectors written to the OpenSearch Serverless index. At query time the `retrieve`
+tool fetches the most relevant chunks and the specialist grounds its answer in
+them, reducing hallucination.
 
 ---
 
-## 6. Security & IAM Model
+## 6. Security Model
 
-- **Least privilege per Lambda.** Each action-group Lambda runs under its own
-  execution role with only the permissions it needs (CloudWatch Logs).
-- **Bedrock → Lambda invocation.** The `ActionGroupExecutor.from_lambda_function`
-  construct wires the resource-based policy that lets the Bedrock service
-  principal (`bedrock.amazonaws.com`) invoke each Lambda. Where the construct
-  does not add it automatically, an explicit `lambda.add_permission` for
-  `bedrock.amazonaws.com` is added, scoped to the agent ARN via
-  `source_arn`/`source_account`.
-- **Agent service roles.** Each Bedrock agent has a service role granting
-  `bedrock:InvokeModel*` on its foundation model — Claude Opus 4.6 for the
-  supervisor, Claude Sonnet 4.6 for the specialists — via the **US cross-region
-  inference profile** (so the grant covers the `inference-profile/*` ARN plus the
-  underlying regional `foundation-model/*` ARNs, generated by the
-  `CrossRegionInferenceProfile` construct). The **Billing and Escalation** agents
-  additionally have `bedrock:Retrieve` on the Knowledge Base.
-- **Knowledge Base role.** A dedicated role grants the Knowledge Base read
-  access to the S3 bucket and read/write access to the OpenSearch Serverless
-  collection; the OpenSearch data-access policy is scoped to that role.
-- **S3 hardening.** `KnowledgeBaseDocsBucket` blocks all public access, uses
-  S3-managed (SSE-S3) encryption, and (for easy demo teardown) is configured
-  with `removal_policy = DESTROY` and `auto_delete_objects = True`.
-- **No customer PII.** The mock datastore is in-memory and synthetic; no real
-  customer data is stored or transmitted. A production deployment would replace
-  the mock with an authenticated billing/CRM integration and add encryption in
-  transit, KMS CMKs, audit logging, and access controls.
-- **Transport.** All service-to-service calls use AWS SigV4 over TLS.
+- **Guardrail on every call.** The Strands `BedrockModel` applies the Bedrock
+  Guardrail to every supervisor/specialist invocation (content, PII, prompt
+  injection, grounding). Authorization-aware policy is enforced via system
+  prompts (only the authenticated account; no competitor recommendations).
+- **IAM (runtime).** The principal running the agents needs
+  `bedrock:InvokeModelWithResponseStream` / `bedrock:InvokeModel` on the
+  inference profiles, `bedrock:ApplyGuardrail` on the guardrail, and
+  `bedrock:Retrieve` on the Knowledge Base. On AgentCore Runtime these are granted
+  to the runtime execution role.
+- **Knowledge Base role (CDK).** A dedicated role grants the Knowledge Base read
+  access to the S3 bucket and read/write to the OpenSearch Serverless collection;
+  the OpenSearch data-access policy is scoped to that role.
+- **S3 hardening.** The docs bucket blocks all public access, uses SSE-S3
+  encryption, and (for easy demo teardown) `removal_policy = DESTROY` +
+  `auto_delete_objects = True`.
+- **No customer PII.** The datastore is in-memory and synthetic. A production
+  deployment would replace it with an authenticated billing/CRM integration and
+  add encryption in transit, KMS CMKs, audit logging and access controls.
+- **Transport.** All service calls use AWS SigV4 over TLS.
 
 ---
 
@@ -271,35 +242,31 @@ reducing hallucination and ensuring answers match AnyCompany's published policy.
 | Target automation / deflection | 40–60% |
 | Projected annual saving | **GBP 489,600 – 734,400** |
 
-The capstone targets a **40–60% cost reduction (~GBP 400–600K/year)**. The
-40% case (~GBP 490K/year) is the conservative planning figure; the 60% case
+The capstone targets a **40–60% cost reduction (~GBP 400–600K/year)**. The 40%
+case (~GBP 490K/year) is the conservative planning figure; the 60% case
 (~GBP 734K/year) is the stretch target once routing accuracy and tool coverage
 mature.
 
 **Where the savings come from:**
-- **Tier-1 deflection** — balance lookups, tariff/policy questions, and
-  appointment booking are fully automated, removing the most common, lowest-
-  complexity contacts from the human queue.
-- **Faster handling** — agentic triage routes complex contacts to the right
-  team immediately (Connect transfer), reducing transfers and average handle
-  time.
-- **24/7 availability** — automated handling outside staffed hours reduces
-  callback volume and abandonment.
-- **Consistency & compliance** — RAG-grounded answers keep responses aligned
-  with published tariffs and policies, lowering rework and complaint rates.
+- **Tier-1 deflection** — balance lookups, tariff/policy questions and appointment
+  booking are fully automated.
+- **Faster handling** — agentic triage routes complex contacts to the right team
+  immediately (Connect transfer), reducing transfers and handle time.
+- **24/7 availability** — automated handling outside staffed hours.
+- **Consistency & compliance** — RAG-grounded answers keep responses aligned with
+  published tariffs and policies.
 
-**Running cost (offsetting):** Bedrock model usage (Claude Opus 4.6 for routing
-+ Claude Sonnet 4.6 for the specialists + Titan embeddings), Lambda invocations,
-OpenSearch Serverless OCUs, and S3 are small relative to the labour savings; the
-tiered model choice keeps the bulk of token volume (specialist tool execution)
-on the cheaper Sonnet tier while reserving Opus for the single routing decision.
-Even at the conservative 40% deflection
-the net benefit is strongly positive. A production rollout would track contained
-rate, escalation rate, and cost-per-resolved-contact as the headline KPIs.
+**Running cost (offsetting):** Bedrock model usage (Claude Opus 4.6 for routing +
+Claude Sonnet 4.6 for the specialists + Titan embeddings), OpenSearch Serverless
+OCUs, and S3 are small relative to the labour savings; the tiered model choice
+keeps the bulk of token volume on the cheaper Sonnet tier while reserving Opus for
+the single routing decision. On AgentCore Runtime, compute is billed for actual
+agent execution. Even at the conservative 40% deflection the net benefit is
+strongly positive.
 
 ---
 
 ## 8. Related Documents
 - [docs/README.md](./README.md) — setup and deployment guide.
-- [docs/demo-script.md](./demo-script.md) — panel demo conversations.
+- [docs/testing-guide.md](./testing-guide.md) — test scenarios.
 - [Top-level README](../README.md) — project overview.

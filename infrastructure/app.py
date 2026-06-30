@@ -2,24 +2,27 @@
 """CDK application entry point for the multi-agent customer-service platform.
 
 This module instantiates a single :class:`MultiAgentCustomerServiceStack`, which
-provisions the full Amazon Bedrock multi-agent collaboration topology (a
-``SUPERVISOR_ROUTER`` intent-router agent fronting three specialist agents),
-an Amazon Bedrock Knowledge Base backed by Amazon OpenSearch Serverless, a
-Bedrock Guardrail applied to every agent, the action-group tool Lambdas
-(with X-Ray tracing), a CloudWatch observability dashboard + alarms, and a
-shared Lambda layer.
+provisions the **supporting AWS infrastructure** for the agentic customer-service
+platform: an Amazon Bedrock Knowledge Base backed by Amazon OpenSearch Serverless
+(Titan V2 embeddings), a Bedrock Guardrail, and a CloudWatch observability
+dashboard + alarms.
 
-Branding, agent-name prefix, foundation-model ids, and the stack name are all
-configurable via ``cdk.json`` context (or ``-c key=value`` on the CLI), so the
-sample can be rebranded for any company/industry. Defaults reproduce the
-original "AnyCompany Energy" demo exactly. See ``cdk.json`` for the full list.
+The multi-agent application itself runs on the **Strands Agents SDK** (see the
+``agents/`` package) — a supervisor intent-router that routes to billing /
+scheduling / escalation specialists via the *agents-as-tools* pattern — and runs
+in process for the demo or on Amazon Bedrock AgentCore Runtime for production, so
+no Bedrock-managed agents are provisioned here.
+
+Branding, the resource-name prefix, the default foundation-model ids, and the
+stack name are configurable via ``cdk.json`` context (or ``-c key=value``).
+Defaults reproduce the original "AnyCompany Energy" demo. See ``cdk.json``.
 
 The stack is bound to an explicit :class:`~aws_cdk.Environment` derived from the
 standard CDK bootstrap environment variables (``CDK_DEFAULT_ACCOUNT`` and
 ``CDK_DEFAULT_REGION``). Binding an environment is required because the
-generative-ai-cdk-constructs Knowledge Base provisions region-specific
-resources (OpenSearch Serverless collections, Bedrock model ARNs) that cannot be
-created in an environment-agnostic stack.
+generative-ai-cdk-constructs Knowledge Base provisions region-specific resources
+(OpenSearch Serverless collections, Bedrock model ARNs) that cannot be created in
+an environment-agnostic stack.
 """
 
 from __future__ import annotations
@@ -55,9 +58,10 @@ def _resolve_environment(region_context: str | None = None) -> cdk.Environment:
         region_context: Value of the ``region`` context key, if provided.
 
     Returns:
-        A :class:`aws_cdk.Environment`. Note: this sample uses **US** cross-region
-        inference profiles, so the region must be a US region unless
-        ``inferenceProfileGeo`` is also overridden (see README "Supported regions").
+        A :class:`aws_cdk.Environment`. The Knowledge Base and Guardrail are
+        region-scoped; the Strands agents auto-detect the matching cross-region
+        inference-profile geo from this region at runtime (see the README
+        "Supported regions").
     """
     account = os.environ.get("CDK_DEFAULT_ACCOUNT")
     region = region_context or os.environ.get("CDK_DEFAULT_REGION") or "us-east-1"
@@ -87,10 +91,10 @@ def main() -> None:
         stack_name,
         env=_resolve_environment(region_context),
         description=(
-            f"{company_name} multi-agent customer-service platform: Amazon Bedrock "
-            "multi-agent collaboration (intent router + billing/scheduling/"
-            "escalation specialists), a Titan-V2-embedded Knowledge Base, a Bedrock "
-            "guardrail, and the supporting Lambda action groups."
+            f"{company_name} multi-agent customer-service platform — supporting "
+            "infrastructure for the Strands Agents application: a Titan-V2-embedded "
+            "Bedrock Knowledge Base (OpenSearch Serverless), a Bedrock guardrail, "
+            "and a CloudWatch observability dashboard + alarms."
         ),
     )
 
