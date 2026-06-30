@@ -295,8 +295,7 @@ def wait_for_agent_ready(
                 f"Agent {agent_id} is in terminal state '{last_status}' and cannot "
                 "serve requests. Re-check the deployment / agent preparation."
             )
-        # Intentional: polling delay for Bedrock agent response streaming
-        time.sleep(interval)
+        time.sleep(interval)  # nosemgrep: arbitrary-sleep — intentional polling delay for Bedrock agent response streaming
         elapsed += interval
     logger.warning(
         "Agent %s did not reach PREPARED within %ss (last status=%s)",
