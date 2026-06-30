@@ -783,10 +783,10 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="classify_intent",
                     description=(
-                        "Classify a customer's free-text query into one of "
-                        "BILLING, SCHEDULING, ESCALATION or UNKNOWN using a "
-                        "keyword/heuristic scorer. Returns JSON with the intent, a "
-                        "0..1 confidence, the recommended specialist agent and a "
+                        "Classify a customer's free-text query into one of " +
+                        "BILLING, SCHEDULING, ESCALATION or UNKNOWN using a " +
+                        "keyword/heuristic scorer. Returns JSON with the intent, a " +
+                        "0..1 confidence, the recommended specialist agent and a " +
                         "short reasoning string."
                     ),
                     parameters={
@@ -811,8 +811,8 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="lookup_account",
                     description=(
-                        "Look up a customer account profile by account number. "
-                        "Returns name, tariff, status, postcode and whether the "
+                        "Look up a customer account profile by account number. " +
+                        "Returns name, tariff, status, postcode and whether the " +
                         "account is on a payment plan."
                     ),
                     parameters={
@@ -826,8 +826,8 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="check_balance",
                     description=(
-                        "Retrieve the current balance and payment status for an "
-                        "account. Returns balance_gbp, due_date, last_payment and "
+                        "Retrieve the current balance and payment status for an " +
+                        "account. Returns balance_gbp, due_date, last_payment and " +
                         "status."
                     ),
                     parameters={
@@ -853,9 +853,9 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="check_availability",
                     description=(
-                        "List available appointment slots for an appointment type "
-                        "and postcode, optionally near a preferred ISO date. "
-                        "Returns a JSON list of slots with slot_id, date, "
+                        "List available appointment slots for an appointment type " +
+                        "and postcode, optionally near a preferred ISO date. " +
+                        "Returns a JSON list of slots with slot_id, date, " +
                         "time_window and engineer_type."
                     ),
                     parameters={
@@ -880,8 +880,8 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="book_appointment",
                     description=(
-                        "Book a previously listed slot for an account. Returns the "
-                        "booking_reference, confirmed_date, confirmed_time_window, "
+                        "Book a previously listed slot for an account. Returns the " +
+                        "booking_reference, confirmed_date, confirmed_time_window, " +
                         "appointment_type and a CONFIRMED status."
                     ),
                     parameters={
@@ -906,7 +906,7 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="cancel_appointment",
                     description=(
-                        "Cancel an existing appointment by its booking reference. "
+                        "Cancel an existing appointment by its booking reference. " +
                         "Returns the booking_reference and a CANCELLED status."
                     ),
                     parameters={
@@ -932,8 +932,8 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="create_ticket",
                     description=(
-                        "Open a case/ticket for an issue that cannot be resolved by "
-                        "automation. Returns ticket_id, status OPEN, category, "
+                        "Open a case/ticket for an issue that cannot be resolved by " +
+                        "automation. Returns ticket_id, status OPEN, category, " +
                         "priority, sla_hours and created_at."
                     ),
                     parameters={
@@ -964,9 +964,9 @@ class MultiAgentCustomerServiceStack(Stack):
                 cfn_bedrock.CfnAgent.FunctionProperty(
                     name="transfer_to_agent",
                     description=(
-                        "Hand the conversation off to a human agent via Amazon "
-                        "Connect. Returns transfer_id, ticket_id, queue, "
-                        "assigned_team, estimated_wait_minutes, connect_contact_id "
+                        "Hand the conversation off to a human agent via Amazon " +
+                        "Connect. Returns transfer_id, ticket_id, queue, " +
+                        "assigned_team, estimated_wait_minutes, connect_contact_id " +
                         "and a TRANSFERRED status."
                     ),
                     parameters={
@@ -1371,9 +1371,9 @@ class MultiAgentCustomerServiceStack(Stack):
                     agent_alias=billing_alias,
                     collaborator_name="BillingSpecialist",
                     collaboration_instruction=(
-                        "Route here for anything about accounts, balances, payments, "
-                        "tariffs, refunds, direct debit, statements or arrears. This "
-                        "specialist can look up the account and check the balance, and "
+                        "Route here for anything about accounts, balances, payments, " +
+                        "tariffs, refunds, direct debit, statements or arrears. This " +
+                        "specialist can look up the account and check the balance, and " +
                         "can ground policy answers in the AnyCompany knowledge base."
                     ),
                     # Relay history so the specialist has full context of the turn.
@@ -1383,8 +1383,8 @@ class MultiAgentCustomerServiceStack(Stack):
                     agent_alias=scheduling_alias,
                     collaborator_name="SchedulingSpecialist",
                     collaboration_instruction=(
-                        "Route here to check appointment availability, book or cancel "
-                        "appointments for METER_READING, ENGINEER_VISIT, "
+                        "Route here to check appointment availability, book or cancel " +
+                        "appointments for METER_READING, ENGINEER_VISIT, " +
                         "LEAK_INVESTIGATION or EV_CHARGER_INSTALL visits."
                     ),
                     relay_conversation_history=True,
@@ -1393,11 +1393,11 @@ class MultiAgentCustomerServiceStack(Stack):
                     agent_alias=escalation_alias,
                     collaborator_name="EscalationSpecialist",
                     collaboration_instruction=(
-                        "Route here for complaints, billing disputes the customer is "
-                        "unhappy about, supply emergencies (no water, leaks), "
-                        "vulnerable-customer situations, requests for a manager / "
-                        "Ombudsman / legal, or any explicit request to speak to a "
-                        "human. This specialist opens cases and can transfer to a "
+                        "Route here for complaints, billing disputes the customer is " +
+                        "unhappy about, supply emergencies (no water, leaks), " +
+                        "vulnerable-customer situations, requests for a manager / " +
+                        "Ombudsman / legal, or any explicit request to speak to a " +
+                        "human. This specialist opens cases and can transfer to a " +
                         "human via Amazon Connect."
                     ),
                     relay_conversation_history=True,
