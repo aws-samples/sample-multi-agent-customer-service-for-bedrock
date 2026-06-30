@@ -27,7 +27,7 @@ DEFAULT_REGION: Final[str] = "us-east-1"
 # Claude Sonnet for fast, cost-efficient tool execution. Both are invoked via a
 # cross-region inference profile (the ``<geo>.`` prefix is added below) because
 # Claude 4.x cannot be invoked on-demand by its bare model id.
-DEFAULT_SUPERVISOR_BASE_MODEL: Final[str] = "anthropic.claude-opus-4-6-v1"
+DEFAULT_SUPERVISOR_BASE_MODEL: Final[str] = "anthropic.claude-opus-4-6"
 DEFAULT_SPECIALIST_BASE_MODEL: Final[str] = "anthropic.claude-sonnet-4-6"
 
 # Valid inference-profile geo prefixes.
@@ -127,6 +127,18 @@ def load_config() -> RuntimeConfig:
             "Ignoring invalid INFERENCE_PROFILE_GEO '%s'; auto-detected '%s' instead.",
             geo_override,
             geo_key,
+        )
+    if geo_key == "APAC":
+        # APAC profiles for Claude Opus/Sonnet 4.6 are not published yet, so the
+        # apac.anthropic.* model ids built below will fail with a Bedrock
+        # validationException at invocation time. Warn loudly so a user whose
+        # credentials default to an ap-* region understands why calls fail.
+        logger.warning(
+            "Region '%s' resolves to the APAC inference-profile geo, but Claude "
+            "Opus/Sonnet 4.6 have no apac.anthropic.* profile yet, so model calls "
+            "will fail. Set AWS_REGION to a US or EU region (or override "
+            "INFERENCE_PROFILE_GEO) — see the README 'Supported regions'.",
+            region,
         )
 
     supervisor_base = (

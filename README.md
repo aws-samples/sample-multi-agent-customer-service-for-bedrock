@@ -54,7 +54,7 @@ calling a tool:
 - **Tiered models:** the supervisor uses **Claude Opus 4.6** for routing
   intelligence; the specialists use **Claude Sonnet 4.6** for fast, cost-efficient
   tool execution. Both are invoked through **cross-region inference profiles**
-  (e.g. `us.anthropic.claude-opus-4-6-v1`) — the geo prefix is auto-detected from
+  (e.g. `us.anthropic.claude-opus-4-6`) — the geo prefix is auto-detected from
   the deploy region (see [Supported regions](#supported-regions)).
 - **Intent classification:** a deterministic keyword scorer (`agents/intent.py`)
   classifies each query into BILLING / SCHEDULING / ESCALATION / UNKNOWN; a
@@ -88,7 +88,7 @@ CloudWatch). See [docs/architecture.md](docs/architecture.md) for the full desig
   (CloudFormation, IAM, S3, Bedrock, OpenSearch Serverless, CloudWatch) and to
   invoke Bedrock models/guardrails at runtime.
 - **Amazon Bedrock model access** enabled in your region for:
-  - `anthropic.claude-opus-4-6-v1` (supervisor)
+  - `anthropic.claude-opus-4-6` (supervisor)
   - `anthropic.claude-sonnet-4-6` (specialists)
   - `amazon.titan-embed-text-v2:0` (Knowledge Base embeddings)
 
@@ -116,14 +116,20 @@ available via cross-region inference profiles:
 To override the auto-detection, set `INFERENCE_PROFILE_GEO=US|EU|APAC` (runtime)
 or `-c inferenceProfileGeo=...` (CDK dashboard metrics).
 
-**Current model availability (verified):**
+**Model IDs are examples — confirm against your account.** The
+`anthropic.claude-opus-4-6` / `anthropic.claude-sonnet-4-6` ids used as defaults
+are examples; the exact Claude model / inference-profile ids that are generally
+available vary by account and region. Before deploying, confirm the ids your
+account exposes with `aws bedrock list-inference-profiles --region <region>` and
+override `SUPERVISOR_MODEL_ID` / `SPECIALIST_MODEL_ID` if they differ.
 
-- **US regions** (`us-east-1`, `us-west-2`, …) — ✅ working (`us.anthropic.*`).
-- **EU regions** (`eu-west-1`, `eu-central-1`, …) — ✅ working (`eu.anthropic.*`).
-- **APAC regions** (`ap-*`) — ⚠️ **not yet supported for Claude 4.6.** Auto-detect
-  selects `APAC`, but Anthropic has not published `apac.anthropic.claude-*-4-6`
-  inference profiles yet, so model calls in an APAC region will fail to resolve.
-  Use US or EU until those profiles are available.
+- **US regions** (`us-east-1`, `us-west-2`, …) — example profiles `us.anthropic.*`.
+- **EU regions** (`eu-west-1`, `eu-central-1`, …) — example profiles `eu.anthropic.*`.
+- **APAC regions** (`ap-*`) — ⚠️ **not currently supported for Claude 4.6.**
+  Auto-detect selects `APAC`, but Anthropic has not published
+  `apac.anthropic.claude-*-4-6` inference profiles yet, so model calls in an APAC
+  region will fail to resolve (the runtime logs a warning). Use US or EU until
+  those profiles are available.
 
 > If model access fails, ensure you've enabled **Claude Opus** and **Claude
 > Sonnet** in the Amazon Bedrock console (**Model access**) for your region, then
@@ -133,6 +139,12 @@ or `-c inferenceProfileGeo=...` (CDK dashboard metrics).
 ## Quick start
 
 ### 1. Deploy the supporting infrastructure (Knowledge Base + Guardrail + CloudWatch)
+
+> **Set your region explicitly.** Deploy and run in a **US or EU** region (e.g.
+> `export AWS_REGION=us-east-1`, or `-c region=us-east-1`). If your credentials
+> default to an APAC region, both the deploy and the runtime will target an
+> `apac.anthropic.*` profile that does not exist for Claude 4.6 (see
+> [Supported regions](#supported-regions)).
 
 ```bash
 cd infrastructure
@@ -163,6 +175,20 @@ automatically. In the **Amazon Bedrock console**, open your Knowledge Base (the
 `knowledge-base/*.md` files change. (RAG answers only work once the sync
 completes.)
 
+For headless / CI use, start the ingestion job from the CLI (the data-source id
+is not a stack output, so look it up first):
+
+```bash
+KB=$(aws cloudformation describe-stacks --stack-name MultiAgentCustomerServiceStack \
+  --query "Stacks[0].Outputs[?OutputKey=='KnowledgeBaseId'].OutputValue" --output text)
+DS=$(aws bedrock-agent list-data-sources --knowledge-base-id "$KB" \
+  --query "dataSourceSummaries[0].dataSourceId" --output text)
+aws bedrock-agent start-ingestion-job --knowledge-base-id "$KB" --data-source-id "$DS"
+# poll until the job status is COMPLETE:
+aws bedrock-agent list-ingestion-jobs --knowledge-base-id "$KB" --data-source-id "$DS" \
+  --query "ingestionJobSummaries[0].status"
+```
+
 ### 3. Run the agents (Streamlit demo)
 
 ```bash
@@ -182,12 +208,18 @@ package and runs it in process; the sidebar shows a live per-turn timeline
 (classification → routing → specialist tool calls). See
 [demo/README.md](demo/README.md) and [docs/testing-guide.md](docs/testing-guide.md).
 
-You can also run the agents headless:
+You can also run the agents headless. Install the `agents` package once so it
+runs from any directory:
 
 ```bash
-# from the repo root, with AWS_REGION / STRANDS_KNOWLEDGE_BASE_ID / GUARDRAIL_ID set
+# from the repo root:
+pip install -e .          # installs the `agents` package + its dependencies
+# then, with AWS_REGION / STRANDS_KNOWLEDGE_BASE_ID / GUARDRAIL_ID set, from anywhere:
 python -m agents.supervisor "What's the balance on ACC-100123?"
 ```
+
+(Without `pip install -e .`, run it **from the repo root** with
+`agents/requirements.txt` installed.)
 
 ### Sample accounts (synthetic)
 
@@ -205,6 +237,12 @@ in LS6 2AB"*, *"I have no water and want to complain about ACC-100789"*.
 A single Bedrock Guardrail (CDK output `GuardrailId`) is applied to **every**
 supervisor and specialist model call, wired natively through the Strands
 `BedrockModel` (`guardrail_id` / `guardrail_version`) in `agents/config.py`.
+
+> **Production requires the guardrail.** The guardrail is wired only when
+> `GUARDRAIL_ID` is set; if it is unset the agents run **unguarded** (the demo
+> flags this with a sidebar warning). For any real deployment — and because the
+> agents-as-tools pattern's prompt-injection resistance relies on the
+> prompt-attack filter — treat `GUARDRAIL_ID` as **required**.
 
 | Policy | Configuration |
 |---|---|
@@ -282,7 +320,7 @@ the agent runtime is configured via environment variables (`demo/.env`).
 | `companyName` / `COMPANY_NAME` | `-c` / env | `AnyCompany Energy` | Brand used in agent prompts/answers |
 | `companyShortName` / `COMPANY_SHORT_NAME` | `-c` / env | `AnyCompany` | Short brand token |
 | `agentPrefix` | `-c` / cdk.json | `anycompany` | Resource-name prefix (KB / guardrail / dashboard) |
-| `supervisorModelId` / `SUPERVISOR_MODEL_ID` | `-c` / env | `anthropic.claude-opus-4-6-v1` | Supervisor base model |
+| `supervisorModelId` / `SUPERVISOR_MODEL_ID` | `-c` / env | `anthropic.claude-opus-4-6` | Supervisor base model |
 | `specialistModelId` / `SPECIALIST_MODEL_ID` | `-c` / env | `anthropic.claude-sonnet-4-6` | Specialist base model |
 | `existingKnowledgeBaseBucketArn` | `-c` / cdk.json | _(empty)_ | Use an S3 bucket you already own (see below) |
 | `STRANDS_KNOWLEDGE_BASE_ID` | env (`demo/.env`) | _(required for RAG)_ | KB id the `retrieve` tool queries |
@@ -320,10 +358,25 @@ stack) and run the Knowledge Base sync yourself.
 
 For the demo, the agents run **in process**. For production scale, deploy the
 same agents to **Amazon Bedrock AgentCore Runtime** with no change to the agent
-logic — wrap the supervisor in an AgentCore entrypoint:
+logic.
+
+**Prerequisites & caveats:**
+- **AgentCore Runtime is region-limited** and its supported regions may differ
+  from where you deployed the CDK stack. Check the
+  [AgentCore documentation](https://docs.aws.amazon.com/bedrock-agentcore/) for
+  the current region list and deploy the runtime in a supported region that also
+  has your Claude models.
+- The **AgentCore Python SDK** and **AgentCore CLI** are additional prerequisites
+  (not used by the demo). The snippet and package/command names below are
+  **illustrative** — confirm the exact package names and commands from the
+  [Strands AgentCore deployment guide](https://strandsagents.com/docs/user-guide/deploy/deploy_to_bedrock_agentcore/python/).
+- `agentcore_app.py` is **not shipped** in this repo — create it yourself from the
+  snippet below (its imports resolve once the AgentCore SDK is installed).
+
+Wrap the supervisor in an AgentCore entrypoint:
 
 ```python
-# agentcore_app.py
+# agentcore_app.py  (you create this file)
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from agents.supervisor import get_supervisor
 
@@ -340,7 +393,7 @@ if __name__ == "__main__":
 ```
 
 Then deploy with the AgentCore CLI (install the AgentCore Python SDK and the
-`@aws/agentcore` CLI — see the linked guide for exact install commands):
+AgentCore CLI — exact package names are in the linked guide):
 
 ```bash
 agentcore configure --entrypoint agentcore_app.py    # or: agentcore create

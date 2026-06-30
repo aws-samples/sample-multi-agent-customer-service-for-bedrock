@@ -204,19 +204,24 @@ The Ombudsman's decision is binding on AnyCompany Energy if you accept it. We wi
 any remedy ordered, which may include an apology, corrective action, or a goodwill payment.
 
 #### 5.4.1 Independent redress scheme contact details
-These are the authoritative contact details agents may share when a customer asks how to
+> **Note:** the contact details below are **illustrative placeholders for this
+> sample**, not real-world contact information. In a production deployment,
+> replace them with the current published details for the relevant redress
+> scheme (verify before use, as published details can change over time).
+
+These are the contact details agents may share when a customer asks how to
 reach the Ombudsman or CCW. Only quote contact details from this list; never invent or guess
 a phone number, email or web address.
 
 **Energy Ombudsman** (energy complaints)
-- Phone: **0330 440 1624**
-- Email: **enquiry@energyombudsman.org**
-- Website: **energyombudsman.org**
+- Phone: **0300 000 0000**
+- Email: **enquiries@example-energy-ombudsman.org**
+- Website: **example-energy-ombudsman.org**
 
 **Consumer Council for Water (CCW)** (water complaints)
-- Phone: **0300 034 2222** (England) / **0300 034 3333** (Wales)
-- Website: **ccw.org.uk**
-- Post: CCW, 23 Stephenson Street, Birmingham, B2 4BH
+- Phone: **0300 000 0001** (England) / **0300 000 0002** (Wales)
+- Website: **example-ccw.org**
+- Post: AnyTown House, 1 Example Street, AnyTown, AT1 1AA
 
 ### 5.5 Agent guidance for escalations
 - Always capture an accurate **issue summary** and assign the correct **category**

@@ -236,9 +236,22 @@ def run_turn(supervisor: Any, collector: TraceCollector, user_text: str) -> Turn
     return result
 
 
+def _redact_sensitive(text: str) -> str:
+    """Mask AWS ARNs and 12-digit account ids in text shown in the UI.
+
+    Bedrock/boto3 errors never contain secret keys, but an ARN can embed the
+    account id; redact defensively in case the demo is ever hosted for others.
+    """
+    import re
+
+    text = re.sub(r"arn:aws[a-z-]*:[^\s\"']+", "<arn-redacted>", text)
+    text = re.sub(r"\b\d{12}\b", "<account-redacted>", text)
+    return text
+
+
 def _friendly_error(exc: Exception) -> str:
     """Translate common failures into operator-friendly guidance."""
-    text = str(exc)
+    text = _redact_sensitive(str(exc))
     lowered = text.lower()
     if "accessdenied" in lowered or "not authorized" in lowered:
         return (
@@ -364,7 +377,12 @@ def main() -> None:
             "policies, Ombudsman contacts) will be unavailable until you set it."
         )
     if not guardrail_id.strip():
-        st.sidebar.info("No Guardrail ID set — running without the Bedrock guardrail.")
+        st.sidebar.warning(
+            "⚠️ No Guardrail ID set — the agents are running **without** the Bedrock "
+            "guardrail (content filters, PII redaction, prompt-attack detection). "
+            "This is fine for a quick local try, but a production deployment must "
+            "treat the guardrail as required (set GUARDRAIL_ID)."
+        )
 
     config_signature = json.dumps(
         {

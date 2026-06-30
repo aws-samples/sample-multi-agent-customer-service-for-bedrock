@@ -33,7 +33,7 @@ deploys to **Amazon Bedrock AgentCore Runtime** for production scale.
 Agents use a **tiered foundation-model strategy**:
 
 - **Supervisor / intent router** — **Anthropic Claude Opus 4.6**
-  (`anthropic.claude-opus-4-6-v1`), for the strongest routing/multi-intent
+  (`anthropic.claude-opus-4-6`), for the strongest routing/multi-intent
   reasoning at the front door.
 - **Specialist agents** (billing, scheduling, escalation) — **Anthropic Claude
   Sonnet 4.6** (`anthropic.claude-sonnet-4-6`), for fast, cost-efficient tool
@@ -214,6 +214,12 @@ them, reducing hallucination.
   Guardrail to every supervisor/specialist invocation (content, PII, prompt
   injection, grounding). Authorization-aware policy is enforced via system
   prompts (only the authenticated account; no competitor recommendations).
+- **Prompt-injection surface.** The agents-as-tools pattern forwards free-text
+  customer input into nested specialist agent loops, which is an inherent
+  prompt-injection surface. It is mitigated by (a) the specialists' only tools
+  being harmless in-memory mock data with no file/network/shell/exec sinks, and
+  (b) the guardrail's prompt-attack filter. **In production the guardrail must be
+  enabled** (`GUARDRAIL_ID` set) — injection resistance relies on it.
 - **IAM (runtime).** The principal running the agents needs
   `bedrock:InvokeModelWithResponseStream` / `bedrock:InvokeModel` on the
   inference profiles, `bedrock:ApplyGuardrail` on the guardrail, and

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anycompany-customer-service-agents"
+version = "1.0.0"
+description = "AnyCompany Energy multi-agent customer-service application (Strands Agents SDK)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT-0"
+dependencies = [
+    "strands-agents>=1.0.0,<2.0.0",
+    "strands-agents-tools>=0.2.0,<1.0.0",
+    "boto3>=1.34.0,<2.0.0",
+]
+
+# Install the multi-agent application with:  pip install -e .
+# This exposes the `agents` package so `python -m agents.supervisor "<query>"`
+# works from any directory (not just the repo root).
+[tool.setuptools]
+packages = ["agents"]
