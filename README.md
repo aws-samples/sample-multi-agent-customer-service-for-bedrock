@@ -96,8 +96,8 @@ CloudWatch). See [docs/architecture.md](docs/architecture.md) for the full desig
   geo is auto-detected from your region — see [Supported regions](#supported-regions)).
   Granting model access to the two base models is sufficient. Verify with
   `aws bedrock list-inference-profiles --region <your-region>`.
-- **Python 3.10+** (Strands requires 3.10+) and **Node.js 18+** (the CDK CLI runs
-  via `npx aws-cdk`).
+- **Python 3.10+** (Strands requires 3.10+) and **Node.js 22 LTS** or later (the
+  CDK CLI runs via `npx aws-cdk`).
 - **Recommended region: `us-east-1`** (broadest Bedrock model availability).
 
 ### Supported regions
@@ -261,9 +261,6 @@ A quick test — this is blocked by the prompt-attack filter:
 
 ### Guardrail design notes
 
-These are deliberate choices for a **published sample** where the happy path must
-work for anyone who clones and runs it:
-
 - **Use guardrails for hard safety, instructions for soft policy.** Content
   filters, prompt-injection, and PII are enforced by the guardrail. Context-
   dependent business rules (don't recommend competitors, only act on the
@@ -360,23 +357,13 @@ For the demo, the agents run **in process**. For production scale, deploy the
 same agents to **Amazon Bedrock AgentCore Runtime** with no change to the agent
 logic.
 
-**Prerequisites & caveats:**
-- **AgentCore Runtime is region-limited** and its supported regions may differ
-  from where you deployed the CDK stack. Check the
-  [AgentCore documentation](https://docs.aws.amazon.com/bedrock-agentcore/) for
-  the current region list and deploy the runtime in a supported region that also
-  has your Claude models.
-- The **AgentCore Python SDK** and **AgentCore CLI** are additional prerequisites
-  (not used by the demo). The snippet and package/command names below are
-  **illustrative** — confirm the exact package names and commands from the
-  [Strands AgentCore deployment guide](https://strandsagents.com/docs/user-guide/deploy/deploy_to_bedrock_agentcore/python/).
-- `agentcore_app.py` is **not shipped** in this repo — create it yourself from the
-  snippet below (its imports resolve once the AgentCore SDK is installed).
-
-Wrap the supervisor in an AgentCore entrypoint:
+Confirm AgentCore Runtime and your chosen Claude models are available in your
+target region before deploying, and deploy the runtime in a region that also has
+the models. Create an `agentcore_app.py` entrypoint (not shipped in this repo)
+that wraps the supervisor:
 
 ```python
-# agentcore_app.py  (you create this file)
+# agentcore_app.py
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from agents.supervisor import get_supervisor
 
@@ -392,12 +379,20 @@ if __name__ == "__main__":
     app.run()
 ```
 
-Then deploy with the AgentCore CLI (install the AgentCore Python SDK and the
-AgentCore CLI — exact package names are in the linked guide):
+Install the AgentCore SDK and the starter toolkit (which provides the `agentcore`
+CLI), then configure, launch, and invoke:
 
 ```bash
-agentcore configure --entrypoint agentcore_app.py    # or: agentcore create
-agentcore launch                                       # build + deploy to AgentCore Runtime
+pip install bedrock-agentcore bedrock-agentcore-starter-toolkit
+
+# Configure the runtime from your entrypoint (auto-creates the execution role
+# and ECR repo; pass -er <role-arn> to use an existing role):
+agentcore configure --entrypoint agentcore_app.py --region us-east-1
+
+# Build the container, push to ECR, and deploy to AgentCore Runtime:
+agentcore launch
+
+# Invoke the deployed agent:
 agentcore invoke '{"prompt": "What is the Economy 7 tariff?"}'
 ```
 
@@ -408,7 +403,7 @@ the [Strands AgentCore deployment guide](https://strandsagents.com/docs/user-gui
 
 ## Production hardening
 
-This sample ships a baseline configuration. For production, consider:
+For production, consider hardening the baseline configuration:
 
 - **Contextual grounding:** set the grounding/relevance filter action to `BLOCK`
   (threshold 0.7) to hard-enforce that RAG answers are grounded.
@@ -450,35 +445,12 @@ This sample ships a baseline configuration. For production, consider:
   enforce authorization-aware policy (only the authenticated account).
 - S3 bucket blocks public access, enforces TLS, uses SSE-S3.
 - The mock datastore is in-memory and synthetic — no real customer data.
+- Default resource encryption and `RemovalPolicy.DESTROY` are used for easy
+  teardown; run `npx aws-cdk destroy` when idle to avoid standing OpenSearch
+  Serverless cost. See [Production hardening](#production-hardening) for KMS CMKs,
+  S3 versioning + access logging, and `RETAIN` removal policies for a real
+  deployment.
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report security issues.
-
-### Scanner findings & accepted trade-offs
-
-This repo has been scanned with `cdk synth`, **checkov**, **bandit**,
-**pip-audit**, and **pip-licenses**. Clean results: bandit (0 issues), pip-audit
-(0 known CVEs), licences (100% permissive — Apache-2.0 / MIT / BSD / MPL-2.0 /
-PSF; no GPL/LGPL/AGPL), and no secrets or real account ids in source.
-
-The synthesized template's remaining checkov findings are **deliberate trade-offs
-for an ephemeral, single-account demo**, not defects — and they are the standard
-"demo" class:
-
-- **OpenSearch Serverless / KB** — no customer-managed KMS key; default
-  encryption is sufficient for synthetic demo data.
-- **S3 docs bucket** — `RemovalPolicy.DESTROY` + `auto_delete_objects` for clean
-  teardown, so versioning and access logging are intentionally off.
-- **IAM wildcards** — originate from **CDK-internal custom resources** (e.g. the
-  OpenSearch index provider, the log-retention/auto-delete constructs) and the
-  managed Knowledge Base service role, not from project code.
-
-The [Production hardening](#production-hardening) section lists what to enable for
-a real deployment (CMKs, S3 versioning + access logging, `RETAIN` removal
-policies, grounding set to `BLOCK`, the commented-out PII filters). Re-run your
-scanner after deploying to confirm the current findings against your account.
-
-Other benign scanner hits: `cdk synth` deprecation warnings originate entirely
-from the pinned `cdklabs.generative-ai-cdk-constructs` library and the CDK CLI,
-not from this sample's code.
 
 ## License & contributing
 

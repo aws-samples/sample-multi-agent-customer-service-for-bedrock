@@ -40,7 +40,7 @@ For test scenarios see [testing-guide.md](./testing-guide.md).
 
 ### 1.2 Local tooling
 - **Python 3.10+** (Strands requires 3.10+; 3.11/3.12 are fine).
-- **Node.js 18+** (the AWS CDK CLI runs via `npx aws-cdk` — no global install).
+- **Node.js 22 LTS** or later (the AWS CDK CLI runs via `npx aws-cdk` — no global install).
   ```bash
   npx aws-cdk --version   # expect 2.x
   ```
