@@ -138,8 +138,11 @@ The Bedrock Guardrail is provisioned by the CDK stack and applied on **every**
 model invocation via the Strands `BedrockModel` (`guardrail_id` /
 `guardrail_version`) — content filters, `FINANCIAL_ADVICE` denied topic, PII
 ANONYMIZE (phone/email/card/sort-code), prompt-attack detection, and contextual
-grounding (detect-only at 0.7). Soft, authorization-aware policy (competitors,
-other customers' data) is enforced via the agent system prompts.
+grounding (detect-only at 0.7). Soft, context-dependent behavior (competitors,
+other customers' data) is **instructed** via the agent system prompts — a
+behavioral instruction, not enforcement. Account-scoped authorization must be
+enforced deterministically at the tool/IAM layer in production (see the top-level
+README "Production hardening").
 
 ### 3.7 Knowledge Base + storage (CDK)
 - **S3 bucket** holds the four markdown documents (deployed via
@@ -212,8 +215,15 @@ them, reducing hallucination.
 
 - **Guardrail on every call.** The Strands `BedrockModel` applies the Bedrock
   Guardrail to every supervisor/specialist invocation (content, PII, prompt
-  injection, grounding). Authorization-aware policy is enforced via system
-  prompts (only the authenticated account; no competitor recommendations).
+  injection, grounding) — this genuinely enforces those policies.
+- **Account scoping is instructed, not enforced.** The system prompts instruct
+  the agents to act only on the authenticated account and not recommend
+  competitors, but a system prompt is a behavioral instruction, not a security
+  control — it does not enforce authorization. The sample tools return data for
+  whatever `account_id` they receive. In production, enforce account-scoped access
+  at the tool/IAM layer: pass the authenticated account identity as trusted
+  context (not as a model-supplied parameter) and reject any tool call that
+  references a different account.
 - **Prompt-injection surface.** The agents-as-tools pattern forwards free-text
   customer input into nested specialist agent loops, which is an inherent
   prompt-injection surface. It is mitigated by (a) the specialists' only tools

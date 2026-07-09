@@ -263,9 +263,11 @@ A quick test — this is blocked by the prompt-attack filter:
 
 - **Use guardrails for hard safety, instructions for soft policy.** Content
   filters, prompt-injection, and PII are enforced by the guardrail. Context-
-  dependent business rules (don't recommend competitors, only act on the
-  authenticated account) are enforced by **agent instructions** (system prompts),
-  which is the right layer for nuanced, authorization-aware policy.
+  dependent business behavior (don't recommend competitors, only act on the
+  authenticated account) is **instructed** by the agent system prompts. A system
+  prompt is a behavioral instruction, not a security control — it does not enforce
+  authorization. Enforce account-scoped access deterministically at the tool/IAM
+  layer (see [Production hardening](#production-hardening)).
 - **No custom "other customers' data" or "competitor" denied topics.** Both were
   evaluated and removed: a topic classifier cannot see authorization context, and
   the ~200-character topic-definition limit makes a "competitor" topic either too
@@ -405,6 +407,10 @@ the [Strands AgentCore deployment guide](https://strandsagents.com/docs/user-gui
 
 For production, consider hardening the baseline configuration:
 
+- **Authorization enforcement:** the sample tools trust the `account_id` they are
+  given. In production, derive the account identity from the authenticated session
+  (not from model output) and validate every tool call against it at the tool/IAM
+  layer — reject any tool call that references a different account.
 - **Contextual grounding:** set the grounding/relevance filter action to `BLOCK`
   (threshold 0.7) to hard-enforce that RAG answers are grounded.
 - **Sensitive-info:** enable the account-number / postcode regex filters
@@ -441,8 +447,13 @@ For production, consider hardening the baseline configuration:
 
 ## Security
 
-- The agents apply the Bedrock Guardrail on every model call; system prompts
-  enforce authorization-aware policy (only the authenticated account).
+- The agents apply the Bedrock Guardrail on every model call — this enforces
+  content filtering, PII anonymization, and prompt-attack detection.
+- The system prompts **instruct** each agent to operate only within the
+  authenticated customer's account. This is a behavioral instruction, not a
+  security control — it does not enforce authorization. Account-scoped access must
+  be enforced deterministically at the tool/IAM layer; see
+  [Production hardening](#production-hardening).
 - S3 bucket blocks public access, enforces TLS, uses SSE-S3.
 - The mock datastore is in-memory and synthetic — no real customer data.
 - Default resource encryption and `RemovalPolicy.DESTROY` are used for easy
