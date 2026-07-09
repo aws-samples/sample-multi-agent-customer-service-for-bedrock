@@ -49,6 +49,20 @@ Embeddings V2**.
 
 ## 2. Architecture Diagram
 
+![Architecture: a serverless multi-agent customer-service platform on Amazon Bedrock. A Streamlit in-process demo sends the user query to a Supervisor / intent router agent running on Amazon Bedrock AgentCore Runtime, which routes to Billing, Scheduling, or Escalation specialist agents. Billing and Escalation ground answers via a Bedrock Knowledge Base (Amazon S3 policy docs ingested and embedded with Titan V2 into Amazon OpenSearch Serverless). Escalation hands off to Amazon Connect. A Bedrock Guardrail intercepts every model call and emits metrics to Amazon CloudWatch.](./architecture.png)
+
+*Editable source: [`architecture.drawio`](./architecture.drawio) — open with [draw.io](https://www.drawio.com/).*
+
+**Numbered flow (matches the badges in the diagram):**
+
+1. A customer query enters through the **Streamlit demo** (which runs the agents in process) and reaches the **Supervisor / intent router**.
+2. The supervisor classifies intent (deterministic keyword scorer, **0.34** threshold) and **routes to one specialist** — billing, scheduling, or escalation.
+3. The **billing** and **escalation** specialists ground answers via the **Bedrock Knowledge Base** (`retrieve`): Amazon S3 policy docs are ingested and embedded with **Titan Text Embeddings V2** into **OpenSearch Serverless** for vector search. *(Scheduling is stateless — no retrieval.)*
+4. The **escalation** specialist opens a ticket and hands off to **Amazon Connect** (human queue).
+5. A **Bedrock Guardrail** intercepts **every** model call; agent and guardrail metrics flow to **Amazon CloudWatch**.
+
+The logical component view below details the agents-as-tools wiring and the mock datastore seam:
+
 ```mermaid
 flowchart TB
     subgraph Client["Demo / Runtime"]
