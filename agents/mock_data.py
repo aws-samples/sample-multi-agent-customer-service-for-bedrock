@@ -215,7 +215,8 @@ def get_account(account_number: str) -> Optional[Dict[str, Any]]:
     normalized = (account_number or "").strip().upper()
     account = ACCOUNTS.get(normalized)
     if account is None:
-        logger.info("Account lookup miss for '%s'", account_number)
+        # Do not log the account identifier (PII) in clear text.
+        logger.info("Account lookup miss (account not found)")
         return None
     # Shallow copy plus a copy of the nested last_payment dict is sufficient
     # because the record otherwise contains only immutable scalars.
@@ -283,11 +284,11 @@ def list_appointment_slots(
                 }
             )
 
+    # Do not log location/PII data (postcodes) even in a sample — demonstrates the clear-text-logging control.
     logger.info(
-        "Generated %d slots for %s in %s starting %s",
+        "Generated %d slots for %s starting %s",
         len(slots),
         appt,
-        clean_postcode,
         start.isoformat(),
     )
     return slots
@@ -411,10 +412,10 @@ def create_booking(
         "status": "CONFIRMED",
     }
     BOOKINGS[booking_reference] = booking
+    # Do not log the account identifier (PII); the booking reference is sufficient.
     logger.info(
-        "Created booking %s for account %s (slot %s)",
+        "Created booking %s (slot %s)",
         booking_reference,
-        booking["account_number"],
         slot_id,
     )
     return dict(booking)

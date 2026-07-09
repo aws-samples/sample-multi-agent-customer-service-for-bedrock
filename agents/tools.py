@@ -83,7 +83,7 @@ def lookup_account(account_number: str) -> Dict[str, Any]:
 
     account = mock_data.get_account(account_number)
     if account is None:
-        logger.info("lookup_account miss for '%s'", account_number)
+        logger.info("lookup_account miss (account not found)")
         return _account_not_found(account_number)
 
     return {
@@ -114,7 +114,7 @@ def check_balance(account_number: str) -> Dict[str, Any]:
 
     account = mock_data.get_account(account_number)
     if account is None:
-        logger.info("check_balance miss for '%s'", account_number)
+        logger.info("check_balance miss (account not found)")
         return _account_not_found(account_number)
 
     return {
@@ -216,7 +216,7 @@ def book_appointment(
     # Confirm the account exists before booking (CRM pre-flight check).
     account = mock_data.get_account(account_number)
     if account is None:
-        logger.info("book_appointment rejected unknown account '%s'", account_number)
+        logger.info("book_appointment rejected (account not found)")
         return {
             "error": "ACCOUNT_NOT_FOUND",
             "account_number": account_number,
