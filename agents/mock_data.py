@@ -285,10 +285,10 @@ def list_appointment_slots(
             )
 
     # Do not log location/PII data (postcodes) even in a sample — demonstrates the clear-text-logging control.
+    # Log only non-sensitive fields (slot count and start date), not the request inputs.
     logger.info(
-        "Generated %d slots for %s starting %s",
+        "Generated %d slots starting %s",
         len(slots),
-        appt,
         start.isoformat(),
     )
     return slots
