@@ -132,6 +132,10 @@ The `@tool` functions are plain Python (no Lambda packaging) that delegate to th
 deterministic in-memory datastore in `agents/mock_data.py`. Slot ids, booking
 references, ticket ids and transfer ids are derived deterministically so the
 `testing-guide.md` scenarios reproduce the same *shapes* every run.
+`mock_data.py` is the integration seam that the `tools.py` `@tool` functions
+delegate to, so replacing it with real CRM/billing/scheduling clients (and
+enforcing account-scoped authorization there — see the top-level README
+"Production hardening") is the single, intended swap point for a production build.
 
 ### 3.6 Guardrail (`agents/config.py` + CDK)
 The Bedrock Guardrail is provisioned by the CDK stack and applied on **every**
