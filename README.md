@@ -336,6 +336,17 @@ export COMPANY_NAME="Globex Telecom" COMPANY_SHORT_NAME="Globex"
 > To fully rebrand the *content*, also edit the `knowledge-base/*.md` documents
 > (and re-sync the Knowledge Base).
 
+### Model configuration
+
+This sample defaults to Claude Opus 4.6 (supervisor) and Claude Sonnet 4.6
+(specialists), set via `cdk.json` context and environment variables. Model
+availability changes over time. If a default model is unavailable in your account
+or region, override the IDs (`SUPERVISOR_MODEL_ID` and `SPECIALIST_MODEL_ID`) with
+a currently available Claude model. Run
+`aws bedrock list-inference-profiles --region <your-region>` to see what is
+active. Model IDs in this sample were verified against Bedrock inference profiles
+as of July 2026.
+
 ### Knowledge base: use your own data
 
 **Option A — Replace the sample files (simplest).** Swap the contents of
@@ -411,6 +422,13 @@ For production, consider hardening the baseline configuration:
   given. In production, derive the account identity from the authenticated session
   (not from model output) and validate every tool call against it at the tool/IAM
   layer — reject any tool call that references a different account.
+- **Multi-model fallback:** a foundation model can become unavailable in a region
+  at short notice (deprecation, capacity, or policy changes). For production, build
+  and test a fallback model path rather than hardcoding a single model. Amazon
+  Bedrock's multi-model access (Anthropic, Amazon, Meta, Mistral, Cohere) provides
+  the routing layer so a single model's unavailability does not take the workload
+  down. Validate the fallback path as part of your deployment testing, not only
+  the primary.
 - **Contextual grounding:** set the grounding/relevance filter action to `BLOCK`
   (threshold 0.7) to hard-enforce that RAG answers are grounded.
 - **Sensitive-info:** enable the account-number / postcode regex filters
