@@ -19,7 +19,7 @@ For test scenarios see [testing-guide.md](./testing-guide.md).
 - An AWS account where you can deploy CDK (CloudFormation, IAM, S3, Bedrock,
   OpenSearch Serverless, CloudWatch) and invoke Bedrock models/guardrails.
 - **Amazon Bedrock model access enabled** in your target region for:
-  - **Anthropic Claude Opus 4.6** — `anthropic.claude-opus-4-6` (supervisor).
+  - **Anthropic Claude Opus 4.6** — `anthropic.claude-opus-4-6-v1` (supervisor).
   - **Anthropic Claude Sonnet 4.6** — `anthropic.claude-sonnet-4-6` (specialists).
   - **Amazon Titan Text Embeddings V2** — `amazon.titan-embed-text-v2:0` (KB).
 
@@ -28,7 +28,7 @@ For test scenarios see [testing-guide.md](./testing-guide.md).
 
   **Cross-region inference profiles:** the Claude 4.6 models do not support
   on-demand invocation by their bare id. The runtime invokes them through a
-  cross-region inference profile (e.g. `us.anthropic.claude-opus-4-6`); the geo
+  cross-region inference profile (e.g. `us.anthropic.claude-opus-4-6-v1`); the geo
   prefix (`us.`/`eu.`/`apac.`) is auto-detected from your region by
   `agents/config.py`. Granting model access to the two Anthropic base models is
   sufficient. Confirm profiles with
@@ -201,7 +201,7 @@ as-is.
 
 **`validationException ... inference profile` errors**
 - The model id must be a cross-region inference profile for your region's geo
-  (e.g. `us.anthropic.claude-opus-4-6`). `agents/config.py` builds this
+  (e.g. `us.anthropic.claude-opus-4-6-v1`). `agents/config.py` builds this
   automatically from `AWS_REGION`; if you set a custom `SUPERVISOR_MODEL_ID` /
   `SPECIALIST_MODEL_ID`, pass the base id (e.g. `anthropic.claude-sonnet-4-6`) and
   let the geo prefix be added, or set `INFERENCE_PROFILE_GEO` explicitly.

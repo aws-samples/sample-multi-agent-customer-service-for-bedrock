@@ -21,7 +21,7 @@
     "companyName": "AnyCompany Energy",
     "companyShortName": "AnyCompany",
     "agentPrefix": "anycompany",
-    "supervisorModelId": "anthropic.claude-opus-4-6",
+    "supervisorModelId": "anthropic.claude-opus-4-6-v1",
     "specialistModelId": "anthropic.claude-sonnet-4-6",
     "models_note": "supervisorModelId/specialistModelId are the base foundation models the Strands agents use (the supervisor uses Opus for routing, specialists use Sonnet). The CDK uses them only to graph the matching Bedrock metrics on the CloudWatch dashboard; the runtime reads its own copies from demo/.env. The cross-region inference-profile geo (us./eu./apac.) is auto-detected from the deploy region.",
     "inferenceProfileGeo_note": "OPTIONAL / override-only. The inference-profile geo (US/EU/APAC) is auto-detected from the deploy region: us-* -> US, eu-*/me-*/af-* -> EU, ap-* -> APAC (unknown -> US). Set inferenceProfileGeo here (or -c inferenceProfileGeo=EU) only to override. US and EU Claude 4.x profiles exist today; an apac.* profile for Claude Opus/Sonnet 4.6 is not yet published (see README 'Supported regions').",
@@ -39,7 +39,7 @@
       "companyName": "Acme Telecom",
       "companyShortName": "Acme",
       "agentPrefix": "acme",
-      "supervisorModelId": "anthropic.claude-opus-4-6",
+      "supervisorModelId": "anthropic.claude-opus-4-6-v1",
       "specialistModelId": "anthropic.claude-sonnet-4-6"
     },
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

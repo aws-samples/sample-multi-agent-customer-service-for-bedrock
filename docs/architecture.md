@@ -33,7 +33,7 @@ deploys to **Amazon Bedrock AgentCore Runtime** for production scale.
 Agents use a **tiered foundation-model strategy**:
 
 - **Supervisor / intent router** — **Anthropic Claude Opus 4.6**
-  (`anthropic.claude-opus-4-6`), for the strongest routing/multi-intent
+  (`anthropic.claude-opus-4-6-v1`), for the strongest routing/multi-intent
   reasoning at the front door.
 - **Specialist agents** (billing, scheduling, escalation) — **Anthropic Claude
   Sonnet 4.6** (`anthropic.claude-sonnet-4-6`), for fast, cost-efficient tool

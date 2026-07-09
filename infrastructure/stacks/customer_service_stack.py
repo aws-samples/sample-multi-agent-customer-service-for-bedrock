@@ -76,7 +76,8 @@ _DEFAULT_AGENT_PREFIX: Final[str] = "anycompany"
 # copies from demo/.env; these are kept here so the CloudWatch dashboard can
 # graph the matching Bedrock model metrics). Supervisor -> Claude Opus 4.6,
 # specialists -> Claude Sonnet 4.6, invoked via cross-region inference profiles.
-_DEFAULT_SUPERVISOR_MODEL_ID: Final[str] = "anthropic.claude-opus-4-6"
+# Opus 4.6 requires the -v1 suffix; Sonnet 4.6 uses the bare alias. Verified against bedrock list-inference-profiles.
+_DEFAULT_SUPERVISOR_MODEL_ID: Final[str] = "anthropic.claude-opus-4-6-v1"
 _DEFAULT_SPECIALIST_MODEL_ID: Final[str] = "anthropic.claude-sonnet-4-6"
 
 # Embeddings model used by the Knowledge Base vector index.

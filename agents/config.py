@@ -27,7 +27,8 @@ DEFAULT_REGION: Final[str] = "us-east-1"
 # Claude Sonnet for fast, cost-efficient tool execution. Both are invoked via a
 # cross-region inference profile (the ``<geo>.`` prefix is added below) because
 # Claude 4.x cannot be invoked on-demand by its bare model id.
-DEFAULT_SUPERVISOR_BASE_MODEL: Final[str] = "anthropic.claude-opus-4-6"
+# Opus 4.6 requires the -v1 suffix; Sonnet 4.6 uses the bare alias. Verified against bedrock list-inference-profiles.
+DEFAULT_SUPERVISOR_BASE_MODEL: Final[str] = "anthropic.claude-opus-4-6-v1"
 DEFAULT_SPECIALIST_BASE_MODEL: Final[str] = "anthropic.claude-sonnet-4-6"
 
 # Valid inference-profile geo prefixes.

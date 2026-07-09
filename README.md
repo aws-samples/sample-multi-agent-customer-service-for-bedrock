@@ -54,7 +54,7 @@ calling a tool:
 - **Tiered models:** the supervisor uses **Claude Opus 4.6** for routing
   intelligence; the specialists use **Claude Sonnet 4.6** for fast, cost-efficient
   tool execution. Both are invoked through **cross-region inference profiles**
-  (e.g. `us.anthropic.claude-opus-4-6`) — the geo prefix is auto-detected from
+  (e.g. `us.anthropic.claude-opus-4-6-v1`) — the geo prefix is auto-detected from
   the deploy region (see [Supported regions](#supported-regions)).
 - **Intent classification:** a deterministic keyword scorer (`agents/intent.py`)
   classifies each query into BILLING / SCHEDULING / ESCALATION / UNKNOWN; a
@@ -88,7 +88,7 @@ CloudWatch). See [docs/architecture.md](docs/architecture.md) for the full desig
   (CloudFormation, IAM, S3, Bedrock, OpenSearch Serverless, CloudWatch) and to
   invoke Bedrock models/guardrails at runtime.
 - **Amazon Bedrock model access** enabled in your region for:
-  - `anthropic.claude-opus-4-6` (supervisor)
+  - `anthropic.claude-opus-4-6-v1` (supervisor)
   - `anthropic.claude-sonnet-4-6` (specialists)
   - `amazon.titan-embed-text-v2:0` (Knowledge Base embeddings)
 
@@ -117,7 +117,7 @@ To override the auto-detection, set `INFERENCE_PROFILE_GEO=US|EU|APAC` (runtime)
 or `-c inferenceProfileGeo=...` (CDK dashboard metrics).
 
 **Model IDs are examples — confirm against your account.** The
-`anthropic.claude-opus-4-6` / `anthropic.claude-sonnet-4-6` ids used as defaults
+`anthropic.claude-opus-4-6-v1` / `anthropic.claude-sonnet-4-6` ids used as defaults
 are examples; the exact Claude model / inference-profile ids that are generally
 available vary by account and region. Before deploying, confirm the ids your
 account exposes with `aws bedrock list-inference-profiles --region <region>` and
@@ -319,7 +319,7 @@ the agent runtime is configured via environment variables (`demo/.env`).
 | `companyName` / `COMPANY_NAME` | `-c` / env | `AnyCompany Energy` | Brand used in agent prompts/answers |
 | `companyShortName` / `COMPANY_SHORT_NAME` | `-c` / env | `AnyCompany` | Short brand token |
 | `agentPrefix` | `-c` / cdk.json | `anycompany` | Resource-name prefix (KB / guardrail / dashboard) |
-| `supervisorModelId` / `SUPERVISOR_MODEL_ID` | `-c` / env | `anthropic.claude-opus-4-6` | Supervisor base model |
+| `supervisorModelId` / `SUPERVISOR_MODEL_ID` | `-c` / env | `anthropic.claude-opus-4-6-v1` | Supervisor base model |
 | `specialistModelId` / `SPECIALIST_MODEL_ID` | `-c` / env | `anthropic.claude-sonnet-4-6` | Specialist base model |
 | `existingKnowledgeBaseBucketArn` | `-c` / cdk.json | _(empty)_ | Use an S3 bucket you already own (see below) |
 | `STRANDS_KNOWLEDGE_BASE_ID` | env (`demo/.env`) | _(required for RAG)_ | KB id the `retrieve` tool queries |
