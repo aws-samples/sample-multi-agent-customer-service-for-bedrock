@@ -120,6 +120,10 @@ def load_config() -> RuntimeConfig:
         requires, and to ``STRANDS_KNOWLEDGE_BASE_ID``.
     """
     region = (os.environ.get("AWS_REGION") or DEFAULT_REGION).strip()
+    # The community `retrieve` tool falls back to us-west-2 when AWS_REGION is
+    # unset; export the resolved region so retrieval targets the deploy region.
+    if not os.environ.get("AWS_REGION"):
+        os.environ["AWS_REGION"] = region
 
     geo_override = (os.environ.get("INFERENCE_PROFILE_GEO") or "").strip().upper()
     geo_key = geo_override if geo_override in _VALID_GEOS else detect_geo(region)
