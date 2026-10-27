@@ -3,7 +3,8 @@
 #
 # strands-agents      : core SDK (Agent, tool, BedrockModel).
 # strands-agents-tools : community tools — provides the `retrieve` tool used for
-#                        Bedrock Knowledge Base RAG (reads STRANDS_KNOWLEDGE_BASE_ID).
+#                        Bedrock Knowledge Base RAG (reads KNOWLEDGE_BASE_ID, set by
+#                        agents/config.py from STRANDS_KNOWLEDGE_BASE_ID).
 # boto3               : AWS SDK (used transitively by the SDK / retrieve tool).
 strands-agents>=1.0.0,<2.0.0
 strands-agents-tools>=0.2.0,<1.0.0

@@ -115,9 +115,9 @@ def load_config() -> RuntimeConfig:
         (``US``/``EU``/``APAC``).
 
     Returns:
-        The resolved :class:`RuntimeConfig`. As a convenience, the resolved KB id
-        is also exported to ``STRANDS_KNOWLEDGE_BASE_ID`` so the community
-        ``retrieve`` tool picks it up.
+        The resolved :class:`RuntimeConfig`. The resolved KB id is also
+        exported to ``KNOWLEDGE_BASE_ID``, which the community ``retrieve`` tool
+        requires, and to ``STRANDS_KNOWLEDGE_BASE_ID``.
     """
     region = (os.environ.get("AWS_REGION") or DEFAULT_REGION).strip()
 
@@ -154,8 +154,9 @@ def load_config() -> RuntimeConfig:
         or os.environ.get("KNOWLEDGE_BASE_ID")
         or ""
     ).strip()
-    # The community `retrieve` tool reads STRANDS_KNOWLEDGE_BASE_ID at call time.
+    # The community `retrieve` tool reads KNOWLEDGE_BASE_ID at call time.
     if kb_id:
+        os.environ["KNOWLEDGE_BASE_ID"] = kb_id
         os.environ["STRANDS_KNOWLEDGE_BASE_ID"] = kb_id
 
     config = RuntimeConfig(
