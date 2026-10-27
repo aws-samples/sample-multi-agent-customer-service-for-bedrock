@@ -8,8 +8,8 @@ The supervisor invokes them using the **agents-as-tools** pattern (see
 The billing and escalation specialists also get the community ``retrieve`` tool
 (from ``strands-agents-tools``) so they can ground tariff/policy/contact answers
 in the Bedrock Knowledge Base (RAG). ``retrieve`` reads the Knowledge Base id
-from the ``STRANDS_KNOWLEDGE_BASE_ID`` environment variable, which
-:func:`agents.config.load_config` populates.
+from the ``KNOWLEDGE_BASE_ID`` environment variable, which
+:func:`agents.config.load_config` populates from ``STRANDS_KNOWLEDGE_BASE_ID``.
 
 System prompts are carried over from the original sample (the guidance is
 unchanged); brand tokens are substituted from ``COMPANY_NAME`` /
