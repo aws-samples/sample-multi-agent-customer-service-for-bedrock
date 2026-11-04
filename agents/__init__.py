@@ -11,6 +11,9 @@ multi-agent pattern:
   specialist agents and exposes each as a callable ``@tool``.
 * :mod:`agents.tools` holds the ``@tool`` functions (formerly Bedrock
   action-group Lambdas) that the specialists call.
+* :mod:`agents.knowledge_base` builds the billing and escalation specialists'
+  ``retrieve`` tool, which searches the Knowledge Base and screens each passage
+  with the guardrail.
 * :mod:`agents.intent` holds the keyword-scoring intent classifier.
 * :mod:`agents.mock_data` is the deterministic in-memory datastore (unchanged
   business logic carried over from the original sample).

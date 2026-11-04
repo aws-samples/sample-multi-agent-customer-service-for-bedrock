@@ -319,8 +319,10 @@ class MultiAgentCustomerServiceStack(Stack):
             them) — the commented-out filters can be enabled for production.
           * Contextual grounding + relevance filters at threshold 0.7. They're
             not evaluated in this sample: the agents' requests carry no tagged
-            grounding source, and guardrails on Converse don't evaluate tool
-            results. See the README "Guardrail design notes".
+            grounding source, guardrails on Converse don't evaluate tool
+            results, and the retrieve tool screens passages as input, while
+            grounding is checked only on output. See the README "Guardrail
+            design notes".
         """
         guardrail = bedrock.Guardrail(
             self,
@@ -524,7 +526,9 @@ class MultiAgentCustomerServiceStack(Stack):
                     "CloudWatch metric. Bedrock model invocation logs hold full, "
                     "unmasked prompts and tool results, so protect the log group "
                     "first (README 'What the guardrail doesn't cover'). The "
-                    "guardrail panel above is a proxy for blocked or masked answers."
+                    "guardrail panel above counts model calls and the retrieve tool's "
+                    "passage checks, so it's a rough proxy for blocked or masked "
+                    "content."
                 ),
                 width=24,
                 height=4,

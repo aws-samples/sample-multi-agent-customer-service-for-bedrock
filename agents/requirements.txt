@@ -1,11 +1,8 @@
 # Strands Agents SDK customer-service application (runtime dependencies).
 # Install with: pip install -r requirements.txt
 #
-# strands-agents      : core SDK (Agent, tool, BedrockModel).
-# strands-agents-tools : community tools — provides the `retrieve` tool used for
-#                        Bedrock Knowledge Base RAG (reads KNOWLEDGE_BASE_ID, set by
-#                        agents/config.py from STRANDS_KNOWLEDGE_BASE_ID).
-# boto3               : AWS SDK (used transitively by the SDK / retrieve tool).
-strands-agents>=1.0.0,<2.0.0
-strands-agents-tools>=0.2.0,<0.9.0  # retrieve becomes an import error in 0.9.0
-boto3>=1.34.0,<2.0.0
+# strands-agents : core SDK (Agent, tool, BedrockModel), and the Bedrock Knowledge
+#                  Base store behind the agents' `retrieve` tool (agents/knowledge_base.py).
+# boto3          : AWS SDK (Knowledge Base retrieval and ApplyGuardrail).
+strands-agents>=1.62.0,<2.0.0  # 1.62 runs Knowledge Base calls off the event loop
+boto3>=1.34.143,<2.0.0  # 1.34.143 adds ApplyGuardrail

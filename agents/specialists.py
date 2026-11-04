@@ -5,11 +5,11 @@ its own tools, and the project Bedrock Guardrail wired in via the model layer.
 The supervisor invokes them using the **agents-as-tools** pattern (see
 :mod:`agents.supervisor`).
 
-The billing and escalation specialists also get the community ``retrieve`` tool
-(from ``strands-agents-tools``) so they can ground tariff/policy/contact answers
-in the Bedrock Knowledge Base (RAG). ``retrieve`` reads the Knowledge Base id
-from the ``KNOWLEDGE_BASE_ID`` environment variable, which
-:func:`agents.config.load_config` populates from ``STRANDS_KNOWLEDGE_BASE_ID``.
+The billing and escalation specialists also get a ``retrieve`` tool
+(:mod:`agents.knowledge_base`) so they can ground tariff/policy/contact answers
+in the Bedrock Knowledge Base (RAG). It searches the Knowledge Base id and Region
+resolved by :func:`agents.config.load_config`, and screens each retrieved passage
+with the guardrail before the model sees it.
 
 System prompts are carried over from the original sample (the guidance is
 unchanged); brand tokens are substituted from ``COMPANY_NAME`` /
@@ -25,6 +25,7 @@ from typing import List
 from strands import Agent
 
 from agents.config import RuntimeConfig, build_model
+from agents.knowledge_base import build_retrieve_tool
 from agents.tools import (
     book_appointment,
     cancel_appointment,
@@ -213,16 +214,8 @@ ESCALATION_PROMPT = (
 
 def _kb_tools(config: RuntimeConfig) -> List[object]:
     """Return the RAG ``retrieve`` tool when a Knowledge Base is configured."""
-    if not config.knowledge_base_enabled:
-        logger.warning(
-            "No Knowledge Base id configured; billing/escalation RAG retrieval is "
-            "disabled. Set STRANDS_KNOWLEDGE_BASE_ID (or KNOWLEDGE_BASE_ID)."
-        )
-        return []
-    # Imported lazily so the package imports without strands-agents-tools present.
-    from strands_tools import retrieve
-
-    return [retrieve]
+    retrieve = build_retrieve_tool(config)
+    return [retrieve] if retrieve is not None else []
 
 
 def build_billing_agent(config: RuntimeConfig, callback_handler: object = None) -> Agent:
