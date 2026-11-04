@@ -91,7 +91,8 @@ The OpenSearch Serverless collection can take **10–15 minutes** on first deplo
 
 > **Cost note — OpenSearch Serverless.** The Knowledge Base vector store bills a
 > **continuous minimum-OCU charge** while the collection exists (the dominant
-> standing cost), even when idle. Run `npx aws-cdk destroy` (section 8) when you
+> standing cost), even when idle. The collection's VPC endpoint adds a smaller
+> hourly AWS PrivateLink charge, and a Route 53 private hosted zone for its DNS. Run `npx aws-cdk destroy` (section 8) when you
 > are not actively using the sample.
 
 ---
@@ -240,6 +241,9 @@ cd infrastructure
 source .venv/bin/activate
 npx aws-cdk destroy
 ```
-The S3 bucket auto-deletes its objects, so the stack tears down cleanly. Because
+The S3 bucket auto-deletes its objects, so the stack tears down without manual
+steps. Expect it to take about 25 minutes: AWS releases the index-creation
+Lambda's VPC network interfaces slowly (about 20 minutes in testing), and the
+OpenSearch Serverless VPC endpoint takes a few more. Because
 OpenSearch Serverless bills a continuous minimum-OCU charge while it exists,
 destroying the stack when you are done is the main way to avoid standing cost.

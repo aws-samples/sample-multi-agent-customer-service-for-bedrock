@@ -37,15 +37,22 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Final
 
 from aws_cdk import (
     CfnOutput,
     Duration,
+    Fn,
     RemovalPolicy,
     Stack,
 )
+from aws_cdk import aws_bedrock as bedrock_l1
 from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_ec2 as ec2
+from aws_cdk import aws_iam as iam
+from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_opensearchserverless as aoss
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3_deployment
 from cdklabs.generative_ai_cdk_constructs import bedrock
@@ -110,6 +117,34 @@ def _profile_model_id(base_model_id: str, geo_key: str) -> str:
     return f"{_GEO_PREFIXES[geo_key]}.{base_model_id}"
 
 
+
+def _construct_child(parent: Construct, child_id: str, expected: type) -> object:
+    """Return a construct's child, failing synth if the construct library changed.
+
+    Used for overrides of generative-ai-cdk-constructs internals, which are
+    validated against the pinned version (0.1.318).
+    """
+    child = parent.node.try_find_child(child_id)
+    if not isinstance(child, expected):
+        raise RuntimeError(
+            f"Expected a {expected.__name__} '{child_id}' under {parent.node.path}; "
+            "generative-ai-cdk-constructs may have changed. Re-check the overrides in "
+            "customer_service_stack.py."
+        )
+    return child
+
+
+def _vpc_endpoint_name(prefix: str) -> str:
+    """Return a valid OpenSearch Serverless VPC endpoint name for the resource prefix.
+
+    Endpoint names allow only 3-32 lowercase letters, digits and hyphens, starting
+    with a letter, which is stricter than the other resources the prefix names.
+    """
+    name = re.sub(r"[^a-z0-9-]", "-", f"{prefix}-kb-index".lower())
+    if not name[0].isalpha():
+        name = f"kb-{name}"
+    return name[:32]
+
 class MultiAgentCustomerServiceStack(Stack):
     """Provision the supporting infrastructure (KB + Guardrail + observability).
 
@@ -119,7 +154,8 @@ class MultiAgentCustomerServiceStack(Stack):
        user-provided existing bucket) and a ``BucketDeployment`` that uploads
        them.
     2. A Bedrock Knowledge Base (OpenSearch Serverless + Titan V2) with an S3
-       data source (fixed-size chunking, 500 tokens / 20% overlap).
+       data source (fixed-size chunking, 500 tokens / 20% overlap). The vector
+       collection has no public network access.
     3. A Bedrock Guardrail (content filters, denied topics, PII ANONYMIZE,
        prompt-attack detection; contextual grounding configured but not
        evaluated).
@@ -198,6 +234,7 @@ class MultiAgentCustomerServiceStack(Stack):
             self._deploy_knowledge_base_documents(docs_bucket)
             kb_inclusion_prefixes = ["knowledge-base/"]
         knowledge_base = self._create_knowledge_base(docs_bucket, kb_inclusion_prefixes)
+        self._make_vector_collection_private(knowledge_base)
 
         # Guardrail applied by the Strands agents on every model invocation.
         guardrail = self._create_guardrail()
@@ -298,6 +335,133 @@ class MultiAgentCustomerServiceStack(Stack):
         )
 
         return knowledge_base
+
+    def _make_vector_collection_private(
+        self, knowledge_base: bedrock.VectorKnowledgeBase
+    ) -> None:
+        """Remove public network access from the Knowledge Base's vector collection.
+
+        generative-ai-cdk-constructs 0.1.318 creates the OpenSearch Serverless
+        collection with a network policy that allows public access (to the
+        collection and to OpenSearch Dashboards), and has no option to change it.
+        This replaces the policy with private access only:
+
+        * Bedrock reaches the collection through AWS service private access
+          (``SourceServices: bedrock.amazonaws.com``).
+        * The construct's index-creation Lambda reaches it through an OpenSearch
+          Serverless VPC endpoint, in a VPC with no internet access.
+        * No OpenSearch Dashboards access.
+        """
+        collection = knowledge_base.vector_store
+        collection_name = collection.collection_name
+
+        # A VPC with one subnet, no internet gateway and no NAT, used only by the
+        # index-creation Lambda. Raw resources avoid a synth-time AZ lookup.
+        vpc = ec2.CfnVPC(
+            self,
+            "VectorIndexVpc",
+            cidr_block="10.0.0.0/24",
+            enable_dns_support=True,
+            enable_dns_hostnames=True,
+        )
+        subnet = ec2.CfnSubnet(
+            self,
+            "VectorIndexSubnet",
+            vpc_id=vpc.ref,
+            cidr_block="10.0.0.0/26",
+            availability_zone=Fn.select(0, Fn.get_azs()),
+        )
+        # Inline egress rules replace a security group's default allow-all egress.
+        # The endpoint's rule matches no traffic (the pattern CDK uses), so it has
+        # no egress at all.
+        endpoint_sg = ec2.CfnSecurityGroup(
+            self,
+            "VectorIndexEndpointSg",
+            vpc_id=vpc.ref,
+            group_description="OpenSearch Serverless VPC endpoint: HTTPS from the index-creation Lambda only.",
+            security_group_egress=[
+                ec2.CfnSecurityGroup.EgressProperty(
+                    ip_protocol="icmp",
+                    cidr_ip="255.255.255.255/32",
+                    from_port=252,
+                    to_port=86,
+                    description="Disallow all traffic",
+                )
+            ],
+        )
+        function_sg = ec2.CfnSecurityGroup(
+            self,
+            "VectorIndexFunctionSg",
+            vpc_id=vpc.ref,
+            group_description="Index-creation Lambda: HTTPS to the OpenSearch Serverless VPC endpoint only.",
+            security_group_egress=[
+                ec2.CfnSecurityGroup.EgressProperty(
+                    ip_protocol="tcp",
+                    from_port=443,
+                    to_port=443,
+                    destination_security_group_id=endpoint_sg.attr_group_id,
+                    description="HTTPS to the OpenSearch Serverless VPC endpoint",
+                )
+            ],
+        )
+        endpoint_ingress = ec2.CfnSecurityGroupIngress(
+            self,
+            "VectorIndexEndpointFromFunction",
+            group_id=endpoint_sg.attr_group_id,
+            ip_protocol="tcp",
+            from_port=443,
+            to_port=443,
+            source_security_group_id=function_sg.attr_group_id,
+        )
+        endpoint = aoss.CfnVpcEndpoint(
+            self,
+            "VectorIndexEndpoint",
+            name=_vpc_endpoint_name(self.agent_prefix),
+            vpc_id=vpc.ref,
+            subnet_ids=[subnet.ref],
+            security_group_ids=[endpoint_sg.attr_group_id],
+        )
+
+        network_policy = _construct_child(collection, "NetworkPolicy", aoss.CfnSecurityPolicy)
+        network_policy.policy = self.to_json_string(
+            [
+                {
+                    "Description": "Private: Bedrock and the index-creation VPC endpoint",
+                    "Rules": [
+                        {
+                            "ResourceType": "collection",
+                            "Resource": [f"collection/{collection_name}"],
+                        }
+                    ],
+                    "AllowFromPublic": False,
+                    "SourceServices": ["bedrock.amazonaws.com"],
+                    "SourceVPCEs": [endpoint.attr_id],
+                }
+            ]
+        )
+
+        # Run the construct's index custom-resource Lambda (one per stack) in the VPC.
+        provider = _construct_child(self, "OpenSearchIndexCRProvider", Construct)
+        role = _construct_child(provider, "CRRole", iam.Role)
+        role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
+            )
+        )
+        function = _construct_child(
+            _construct_child(provider, "CustomResourcesFunction", Construct),
+            "Resource",
+            lambda_.CfnFunction,
+        )
+        function.add_property_override(
+            "VpcConfig",
+            {"SubnetIds": [subnet.ref], "SecurityGroupIds": [function_sg.attr_group_id]},
+        )
+        # The index is created and deleted through the endpoint, so the function
+        # must not run before the endpoint and its ingress rule exist, or after
+        # either is deleted. Nothing else references the ingress rule, so without
+        # this CloudFormation would delete it first on stack delete.
+        function.node.add_dependency(endpoint, endpoint_ingress)
 
     # ------------------------------------------------------------------ #
     # Guardrail
@@ -405,20 +569,26 @@ class MultiAgentCustomerServiceStack(Stack):
         # )
 
         # --- Contextual grounding --------------------------------------- #
-        # Threshold 0.7 with action NONE requested (measure, don't block). Note:
-        # grounding only runs when a request tags a grounding source and a query,
-        # which the agents' Converse calls don't, and generative-ai-cdk-constructs
-        # 0.1.318 doesn't render `action`, so the deployed filters have none.
-        # See README "Guardrail design notes".
-        guardrail.add_contextual_grounding_filter(
-            type=bedrock.ContextualGroundingFilterType.GROUNDING,
-            threshold=0.7,
-            action=bedrock.GuardrailAction.NONE,
+        # Threshold 0.7, action NONE (measure, don't block). Grounding only runs
+        # when a request tags a grounding source and a query, which the agents'
+        # Converse calls don't. See README "Guardrail design notes".
+        grounding_filters = (
+            (bedrock.ContextualGroundingFilterType.GROUNDING, 0.7),
+            (bedrock.ContextualGroundingFilterType.RELEVANCE, 0.7),
         )
-        guardrail.add_contextual_grounding_filter(
-            type=bedrock.ContextualGroundingFilterType.RELEVANCE,
-            threshold=0.7,
-            action=bedrock.GuardrailAction.NONE,
+        for ftype, threshold in grounding_filters:
+            guardrail.add_contextual_grounding_filter(
+                type=ftype, threshold=threshold, action=bedrock.GuardrailAction.NONE
+            )
+        # generative-ai-cdk-constructs 0.1.318 drops each filter's `action`, so set
+        # it on the underlying CfnGuardrail.
+        cfn_guardrail = _construct_child(guardrail, "MyGuardrail", bedrock_l1.CfnGuardrail)
+        cfn_guardrail.add_property_override(
+            "ContextualGroundingPolicyConfig.FiltersConfig",
+            [
+                {"Type": ftype.value, "Threshold": threshold, "Action": "NONE"}
+                for ftype, threshold in grounding_filters
+            ],
         )
 
         return guardrail
