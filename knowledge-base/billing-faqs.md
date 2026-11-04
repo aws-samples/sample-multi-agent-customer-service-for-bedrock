@@ -233,16 +233,3 @@ Yes. We collect the level of read frequency needed to bill you and operate your 
 can choose how often we collect detailed data (e.g. half-hourly, daily, or monthly) except
 where half-hourly data is required to operate a time-of-use tariff you have chosen. Your data
 is handled in line with UK data-protection law.
-
----
-
-## Quick reference — sample demo accounts
-
-| Account | Name | Tariff | Status | Notes |
-|---|---|---|---|---|
-| ACC-100123 | Sarah Thompson | Economy 7 | ACTIVE | Balance owed; two-rate meter — submit both reads |
-| ACC-100456 | James Okafor | Standard Variable | ACTIVE | On a payment plan; balance clear |
-| ACC-100789 | Priya Patel | EV Smart | ARREARS | Arrears balance; on Priority Services Register |
-
-*These are fictional accounts used for demonstration of the AnyCompany Energy agentic
-customer-service assistant.*
