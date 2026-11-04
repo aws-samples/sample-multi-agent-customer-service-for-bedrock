@@ -117,11 +117,13 @@ def load_config() -> RuntimeConfig:
     Returns:
         The resolved :class:`RuntimeConfig`. The resolved KB id is also
         exported to ``KNOWLEDGE_BASE_ID``, which the community ``retrieve`` tool
-        requires, and to ``STRANDS_KNOWLEDGE_BASE_ID``.
+        requires, and to ``STRANDS_KNOWLEDGE_BASE_ID``. When ``AWS_REGION`` is
+        unset, the resolved region is exported to it too.
     """
     region = (os.environ.get("AWS_REGION") or DEFAULT_REGION).strip()
     # The community `retrieve` tool falls back to us-west-2 when AWS_REGION is
-    # unset; export the resolved region so retrieval targets the deploy region.
+    # unset; export the resolved region so retrieval uses the same region as the
+    # model calls.
     if not os.environ.get("AWS_REGION"):
         os.environ["AWS_REGION"] = region
 
