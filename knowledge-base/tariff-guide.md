@@ -9,7 +9,7 @@ where applicable.*
 > **Consistency note.** The tariffs documented here are the only domestic tariffs the
 > AnyCompany customer-service agents will quote: **Economy 7**, **Standard Variable**, and
 > **EV Smart** (plus the legacy **Fixed Saver** for reference). These match the tariffs held
-> on the sample demo accounts (see the comparison table and `billing-faqs.md`).
+> on the sample demo accounts (see the comparison table).
 
 ---
 
