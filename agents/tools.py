@@ -8,8 +8,8 @@ that Strands exposes to the model via its docstring and type hints, and the
 tools run **in process** rather than as separate Lambdas.
 
 Tools return plain dictionaries; Strands serialises them into the tool-result
-content automatically. Validation/error payloads mirror the original contract so
-the agents behave identically.
+content automatically. Validation/error payloads follow the original contract,
+except that the unknown-account payload no longer lists the sample accounts.
 """
 
 from __future__ import annotations
@@ -24,11 +24,14 @@ from agents.intent import classify_intent_payload
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-_KNOWN_SAMPLE_ACCOUNTS = ["ACC-100123", "ACC-100456", "ACC-100789"]
-
 
 def _account_not_found(account_number: str) -> Dict[str, Any]:
-    """Build a consistent payload for an unknown account."""
+    """Build a consistent payload for an unknown account.
+
+    It names no other accounts, so a wrong or guessed number reveals nothing
+    about which accounts exist. The sample accounts are listed in README.md and
+    docs/testing-guide.md.
+    """
     return {
         "error": "ACCOUNT_NOT_FOUND",
         "account_number": account_number,
@@ -36,7 +39,6 @@ def _account_not_found(account_number: str) -> Dict[str, Any]:
             f"No account was found matching '{account_number}'. Please confirm "
             "the account number, which has the format ACC-NNNNNN."
         ),
-        "known_sample_accounts": _KNOWN_SAMPLE_ACCOUNTS,
     }
 
 
