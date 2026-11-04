@@ -16,8 +16,8 @@ resources the agents depend on:
   Titan Text Embeddings V2) over the policy/FAQ markdown documents in S3 — the
   RAG source for the billing and escalation specialists.
 * A **Bedrock Guardrail** (content filters, denied topics, PII ANONYMIZE,
-  prompt-attack detection, contextual grounding) that the Strands agents apply on
-  every model invocation via the model layer.
+  prompt-attack detection; contextual grounding configured but not evaluated)
+  that the Strands agents apply on every model invocation via the model layer.
 * **CloudWatch** observability — a dashboard (Bedrock invocation/latency/error
   metrics + guardrail activity) and alarms.
 
@@ -121,7 +121,8 @@ class MultiAgentCustomerServiceStack(Stack):
     2. A Bedrock Knowledge Base (OpenSearch Serverless + Titan V2) with an S3
        data source (fixed-size chunking, 500 tokens / 20% overlap).
     3. A Bedrock Guardrail (content filters, denied topics, PII ANONYMIZE,
-       prompt-attack detection, contextual grounding).
+       prompt-attack detection; contextual grounding configured but not
+       evaluated).
     4. A CloudWatch dashboard + alarms.
     5. ``CfnOutput`` values (Knowledge Base id, Guardrail id/arn, bucket, region)
        consumed by the Strands agent runtime / Streamlit demo via ``demo/.env``.
@@ -316,8 +317,10 @@ class MultiAgentCustomerServiceStack(Stack):
             ``ACC-NNNNNN`` account numbers are intentionally NOT filtered (no
             detect-only mode exists for regex filters and the demo must surface
             them) — the commented-out filters can be enabled for production.
-          * Contextual grounding + relevance scored at threshold 0.7 in
-            detect-only (NONE) mode by default; flip to BLOCK to hard-enforce.
+          * Contextual grounding + relevance filters at threshold 0.7. They're
+            not evaluated in this sample: the agents' requests carry no tagged
+            grounding source, and guardrails on Converse don't evaluate tool
+            results. See the README "Guardrail design notes".
         """
         guardrail = bedrock.Guardrail(
             self,
@@ -399,11 +402,12 @@ class MultiAgentCustomerServiceStack(Stack):
         #     action=bedrock.GuardrailAction.ANONYMIZE,
         # )
 
-        # --- Contextual grounding (RAG answers must be grounded) --------- #
-        # Threshold 0.7; action NONE (detect/measure) by DEFAULT so the
-        # conversational, empathy-framed RAG answers are scored for
-        # grounding/relevance without being blocked. Set action=BLOCK to
-        # hard-enforce grounding in production. See README "Guardrail design notes".
+        # --- Contextual grounding --------------------------------------- #
+        # Threshold 0.7 with action NONE requested (measure, don't block). Note:
+        # grounding only runs when a request tags a grounding source and a query,
+        # which the agents' Converse calls don't, and generative-ai-cdk-constructs
+        # 0.1.318 doesn't render `action`, so the deployed filters have none.
+        # See README "Guardrail design notes".
         guardrail.add_contextual_grounding_filter(
             type=bedrock.ContextualGroundingFilterType.GROUNDING,
             threshold=0.7,
@@ -517,10 +521,10 @@ class MultiAgentCustomerServiceStack(Stack):
                     "**Amazon Bedrock AgentCore Runtime**, enable CloudWatch "
                     "Transaction Search + ADOT for end-to-end traces (see the README "
                     "'Production deployment'). RAG retrieval is not a default "
-                    "CloudWatch metric — enable **Bedrock model-invocation logging** "
-                    "and add a metric filter on empty `retrievalResults` for an "
-                    "empty-result rate. The guardrail panel above is a useful proxy "
-                    "for blocked/low-grounding answers."
+                    "CloudWatch metric. Bedrock model invocation logs hold full, "
+                    "unmasked prompts and tool results, so protect the log group "
+                    "first (README 'What the guardrail doesn't cover'). The "
+                    "guardrail panel above is a proxy for blocked or masked answers."
                 ),
                 width=24,
                 height=4,

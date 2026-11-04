@@ -155,9 +155,12 @@ enforcing account-scoped authorization there — see the top-level README
 The Bedrock Guardrail is provisioned by the CDK stack and applied on **every**
 model invocation via the Strands `BedrockModel` (`guardrail_id` /
 `guardrail_version`) — content filters, `FINANCIAL_ADVICE` denied topic, PII
-ANONYMIZE (phone/email/card/sort-code), prompt-attack detection, and contextual
-grounding (detect-only at 0.7). Soft, context-dependent behavior (competitors,
-other customers' data) is **instructed** via the agent system prompts — a
+ANONYMIZE (phone/email/card/sort-code) and prompt-attack detection. Contextual
+grounding filters are configured at 0.7 but not evaluated, because the requests
+carry no tagged grounding source, and guardrails on Converse don't evaluate tool
+results (see the top-level README "What the guardrail doesn't cover"). Soft,
+context-dependent behavior (competitors, other customers' data) is **instructed**
+via the agent system prompts — a
 behavioral instruction, not enforcement. Account-scoped authorization must be
 enforced deterministically at the tool/IAM layer in production (see the top-level
 README "Production hardening").
@@ -232,8 +235,11 @@ them, reducing hallucination.
 ## 6. Security Model
 
 - **Guardrail on every call.** The Strands `BedrockModel` applies the Bedrock
-  Guardrail to every supervisor/specialist invocation (content, PII, prompt
-  injection, grounding) — this genuinely enforces those policies.
+  Guardrail to every supervisor/specialist invocation — this enforces content and
+  PII policies on model input and output, and prompt-attack detection on input.
+  It doesn't
+  evaluate tool results, so retrieved knowledge-base text isn't screened, and
+  contextual grounding isn't evaluated.
 - **Account scoping is instructed, not enforced.** The system prompts instruct
   the agents to act only on the authenticated account and not recommend
   competitors, but a system prompt is a behavioral instruction, not a security
@@ -246,8 +252,10 @@ them, reducing hallucination.
   customer input into nested specialist agent loops, which is an inherent
   prompt-injection surface. It is mitigated by (a) the specialists' only tools
   being harmless in-memory mock data with no file/network/shell/exec sinks, and
-  (b) the guardrail's prompt-attack filter. **In production the guardrail must be
-  enabled** (`GUARDRAIL_ID` set) — injection resistance relies on it.
+  (b) the guardrail's prompt-attack filter, which screens customer input, not
+  tool results such as retrieved knowledge-base text. **In production the
+  guardrail must be enabled** (`GUARDRAIL_ID` set) — injection resistance relies
+  on it.
 - **IAM (runtime).** The principal running the agents needs
   `bedrock:InvokeModelWithResponseStream` / `bedrock:InvokeModel` on the
   inference profiles, `bedrock:ApplyGuardrail` on the guardrail, and

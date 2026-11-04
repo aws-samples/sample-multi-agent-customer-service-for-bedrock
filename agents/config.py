@@ -190,9 +190,11 @@ def build_model(model_id: str, config: RuntimeConfig, *, temperature: float = 0.
     """Create a Strands :class:`BedrockModel` with the project's guardrail wired.
 
     The Bedrock Guardrail (content filters, denied topics, PII ANONYMIZE,
-    prompt-attack detection, contextual grounding) is applied natively at the
-    model layer via the ``guardrail_*`` parameters, so every supervisor and
-    specialist invocation is guarded with no extra wrapper code.
+    prompt-attack detection) is applied natively at the model layer via the
+    ``guardrail_*`` parameters, so every supervisor and specialist invocation is
+    guarded with no extra wrapper code. Guardrails on Converse don't evaluate tool
+    results, and contextual grounding needs a tagged grounding source that these
+    requests don't carry; see the README "What the guardrail doesn't cover".
 
     Args:
         model_id: The cross-region inference-profile model id to invoke.
@@ -216,6 +218,9 @@ def build_model(model_id: str, config: RuntimeConfig, *, temperature: float = 0.
         kwargs.update(
             guardrail_id=config.guardrail_id,
             guardrail_version=config.guardrail_version,
+            # Strands uses the trace to detect blocked turns and redact them from
+            # history. The trace carries the PII values the guardrail detected,
+            # so treat stored responses (e.g. invocation logs) as raw PII.
             guardrail_trace="enabled",
         )
     return BedrockModel(**kwargs)

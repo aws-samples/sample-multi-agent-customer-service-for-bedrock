@@ -30,8 +30,9 @@ without changing code. See [Customise for your industry](#customise-for-your-ind
   a Bedrock Knowledge Base (OpenSearch Serverless + Titan V2 embeddings), queried
   with the Strands `retrieve` tool.
 - **Responsible-AI guardrails** — a Bedrock Guardrail (content filters,
-  sensitive-info redaction, denied topics, prompt-attack detection, contextual
-  grounding) applied on **every** model invocation via the Strands model layer.
+  sensitive-info redaction, denied topics, prompt-attack detection; contextual
+  grounding configured but not evaluated) applied on **every** model invocation
+  via the Strands model layer.
 - **Observability** — live per-turn tool/routing timeline via Strands callbacks,
   plus a CloudWatch dashboard and alarms over Bedrock + guardrail metrics.
 - **Portable runtime** — the agents run in process for the demo and deploy
@@ -254,14 +255,15 @@ supervisor and specialist model call, wired natively through the Strands
 > `GUARDRAIL_ID` is set; if it is unset the agents run **unguarded** (the demo
 > flags this with a sidebar warning). For any real deployment — and because the
 > agents-as-tools pattern's prompt-injection resistance relies on the
-> prompt-attack filter — treat `GUARDRAIL_ID` as **required**.
+> prompt-attack filter — treat `GUARDRAIL_ID` as **required**. The filter screens
+> customer input, not tool results such as retrieved knowledge-base text.
 
 | Policy | Configuration |
 |---|---|
 | **Content filters** | HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT at HIGH (input + output); PROMPT_ATTACK at HIGH (input) |
 | **Sensitive info (redacted / ANONYMIZE)** | Phone, email, credit/debit card number + CVV + expiry, and UK sort code (regex) |
 | **Denied topics** | `FINANCIAL_ADVICE` (managed) |
-| **Contextual grounding** | GROUNDING + RELEVANCE scored at threshold 0.7 (detect/measure mode by default) |
+| **Contextual grounding** | GROUNDING + RELEVANCE filters at threshold 0.7: configured, but not evaluated in this sample (see [Guardrail design notes](#guardrail-design-notes)) |
 
 A quick test — this is blocked by the prompt-attack filter:
 
@@ -284,10 +286,16 @@ A quick test — this is blocked by the prompt-attack filter:
   evaluated and removed: a topic classifier cannot see authorization context, and
   the ~200-character topic-definition limit makes a "competitor" topic either too
   vague or too long to deploy. The agent system prompts cover both policies.
-- **Contextual grounding is detect-only by default.** The threshold is 0.7, but
-  the action is `NONE` (measure, don't block) so the conversational,
-  empathy-framed RAG answers are scored without being blocked. Set the action to
-  `BLOCK` to hard-enforce grounding (see Production hardening).
+- **Contextual grounding is configured but not evaluated.** The guardrail defines
+  GROUNDING and RELEVANCE filters at threshold 0.7, but a grounding check needs
+  the request to tag a grounding source and a query, and this sample's Converse
+  calls don't: retrieved knowledge-base text reaches the model as a tool result,
+  which guardrails on Converse don't evaluate. So no grounding score is produced.
+  The CDK construct version used here (generative-ai-cdk-constructs 0.1.318) also
+  drops the filters' `action`, so the deployed filters don't get the requested
+  `NONE`. AWS docs don't say what an omitted action does, so set the action
+  explicitly if you make grounding run (see
+  [Production hardening](#production-hardening)).
 
 ### Guardrail PII tradeoff
 
@@ -299,6 +307,29 @@ Knowledge Base) is **delivered with the value masked** rather than refused.
 the billing/scheduling flows depend on surfacing them). The filters are provided
 **commented out** in `infrastructure/stacks/customer_service_stack.py`
 (`_create_guardrail`); uncomment them (action ANONYMIZE) to enforce redaction.
+
+### What the guardrail doesn't cover
+
+The guardrail screens the text messages sent to each model call and the text
+the model returns, and masks the PII it finds there. It doesn't cover:
+
+- **Tool results.** Guardrails on Converse don't evaluate `toolResult` content, so
+  account records and retrieved knowledge-base text reach the model unscreened.
+- **Tool-call arguments.** Guardrails on Converse don't evaluate the `toolUse`
+  input the model generates, so PII the model passes to a tool isn't masked.
+- **Bedrock model invocation logs.** This stack doesn't turn them on, but they're
+  set per account and Region, so they may already be on. Each entry keeps the
+  original request: system prompt, whole conversation, tool inputs and tool
+  results. Because the agents set `guardrail_trace="enabled"` (Strands uses the
+  trace to redact blocked turns from history), logged responses also carry the
+  values the guardrail detected.
+- **OpenTelemetry traces.** Strands records messages, tool inputs and tool results
+  in its spans. On AgentCore Runtime with Transaction Search, they land in
+  CloudWatch Logs as they are.
+- **App logs at DEBUG.** At INFO the agents log no customer data; at DEBUG, Strands
+  logs the full model request.
+
+See [Production hardening](#production-hardening) for how to close these gaps.
 
 ## Observability
 
@@ -312,8 +343,10 @@ the billing/scheduling flows depend on surfacing them). The filters are provided
 - **CloudWatch dashboard** (`<prefix>-customer-service`): Bedrock invocations and
   latency per model (supervisor/specialist inference profiles), Bedrock
   errors/throttles, and guardrail invocations vs interventions. RAG retrieval
-  count/empty-result rate requires Bedrock model-invocation logging — the
-  dashboard documents how to wire it.
+  isn't a default CloudWatch metric. If you turn on Bedrock model invocation
+  logging to study it, protect the log group first: it holds full, unmasked
+  prompts and tool results (see
+  [What the guardrail doesn't cover](#what-the-guardrail-doesnt-cover)).
 - **Alarms:** Bedrock specialist-model server errors over 5 min, and an
   estimated-cost guard (`AWS/Billing EstimatedCharges` > `dailyCostAlarmUsd`,
   default $10; requires billing alerts enabled in us-east-1).
@@ -441,8 +474,21 @@ For production, consider hardening the baseline configuration:
   the routing layer so a single model's unavailability does not take the workload
   down. Validate the fallback path as part of your deployment testing, not only
   the primary.
-- **Contextual grounding:** set the grounding/relevance filter action to `BLOCK`
-  (threshold 0.7) to hard-enforce that RAG answers are grounded.
+- **Contextual grounding:** to make grounding run, check each RAG answer with
+  `ApplyGuardrail` and `source="OUTPUT"` (grounding is checked only on output),
+  tagging the retrieved text as `grounding_source`, the question as `query` and
+  the answer as `guard_content`. Set the filter action explicitly: `NONE` to measure, `BLOCK` to
+  enforce. generative-ai-cdk-constructs 0.1.318 drops `action`, so add it with a
+  property override on the guardrail's underlying `CfnGuardrail`.
+- **Retrieved content:** screen knowledge-base text with `ApplyGuardrail` before it
+  reaches the model, since guardrails on Converse don't evaluate tool results.
+- **Logs and traces:** before turning on Bedrock model invocation logging, create
+  its log group with a KMS key, a retention period and a CloudWatch Logs data
+  protection policy (masking isn't retroactive), and grant `logs:Unmask` only to
+  an audit role. JSON bodies over 100 KB (and binary data) go to the S3 large-data
+  location instead, if you configure one. That policy doesn't cover S3, so protect
+  that bucket too. Do the same for the AgentCore runtime and
+  `aws/spans` log groups.
 - **Sensitive-info:** enable the account-number / postcode regex filters
   (ANONYMIZE) and add any industry-specific identifiers.
 - **Denied topics:** add custom denied topics tuned to your domain.
@@ -478,7 +524,9 @@ For production, consider hardening the baseline configuration:
 ## Security
 
 - The agents apply the Bedrock Guardrail on every model call — this enforces
-  content filtering, PII anonymization, and prompt-attack detection.
+  content filtering and PII anonymization on model input and output, and
+  prompt-attack detection on input. It doesn't evaluate tool results or mask logs and traces; see
+  [What the guardrail doesn't cover](#what-the-guardrail-doesnt-cover).
 - The system prompts **instruct** each agent to operate only within the
   authenticated customer's account. This is a behavioral instruction, not a
   security control — it does not enforce authorization. Account-scoped access must
