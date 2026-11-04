@@ -3,5 +3,5 @@
 #   pip install -r requirements.txt
 streamlit>=1.36,<2.0
 strands-agents>=1.0.0,<2.0.0
-strands-agents-tools>=0.2.0,<1.0.0
+strands-agents-tools>=0.2.0,<0.9.0  # retrieve becomes an import error in 0.9.0
 boto3>=1.34.0,<2.0.0
