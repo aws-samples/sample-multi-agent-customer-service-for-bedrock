@@ -209,8 +209,10 @@ as-is.
 
 **RAG returns nothing / "I don't have that information"**
 - The Knowledge Base **Sync** has not been run or has not finished (section 3).
-- `STRANDS_KNOWLEDGE_BASE_ID` is unset or wrong — the billing/escalation specialists
-  will warn at startup that RAG is disabled. Confirm the docs landed in the bucket:
+- `STRANDS_KNOWLEDGE_BASE_ID` is unset or wrong. If unset, the billing/escalation
+  specialists warn at startup that RAG is disabled; if wrong, the `retrieve` tool
+  returns an error such as "Knowledge Base search failed
+  (ResourceNotFoundException)". Confirm the docs landed in the bucket:
   ```bash
   aws s3 ls "s3://$(aws cloudformation describe-stacks --stack-name "$STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='DocsBucketName'].OutputValue" --output text)/"

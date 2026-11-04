@@ -155,13 +155,15 @@ enforcing account-scoped authorization there — see the top-level README
 The Bedrock Guardrail is provisioned by the CDK stack and applied on **every**
 model invocation via the Strands `BedrockModel` (`guardrail_id` /
 `guardrail_version`) — content filters, `FINANCIAL_ADVICE` denied topic, PII
-ANONYMIZE (phone/email/card/sort-code) and prompt-attack detection. Contextual
+ANONYMIZE on output (phone/email/card/sort-code) and prompt-attack detection. Contextual
 grounding filters are configured at 0.7 but not evaluated, because the requests
 carry no tagged grounding source, and guardrails on Converse don't evaluate tool
-results (see the top-level README "What the guardrail doesn't cover"). Soft,
-context-dependent behavior (competitors, other customers' data) is **instructed**
-via the agent system prompts — a
-behavioral instruction, not enforcement. Account-scoped authorization must be
+results (see the top-level README "What the guardrail doesn't cover"). The
+`retrieve` tool (`agents/knowledge_base.py`) also applies the guardrail itself,
+with `ApplyGuardrail`, to each retrieved passage before the specialist sees it.
+Soft, context-dependent behavior (competitors, other customers' data) is
+**instructed** via the agent system prompts — a behavioral instruction, not
+enforcement. Account-scoped authorization must be
 enforced deterministically at the tool/IAM layer in production (see the top-level
 README "Production hardening").
 
@@ -212,6 +214,7 @@ sequenceDiagram
     participant B as Billing agent (tool)
     participant KB as Knowledge Base
     participant OSS as OpenSearch Serverless
+    participant G as Bedrock Guardrail
 
     U->>S: "What is the Economy 7 tariff?"
     S->>S: classify_intent -> BILLING
@@ -220,6 +223,8 @@ sequenceDiagram
     KB->>OSS: vector search (Titan V2 embedding)
     OSS-->>KB: top-k matching chunks
     KB-->>B: passages from tariff-guide.md
+    B->>G: ApplyGuardrail (each passage)
+    G-->>B: passages as is, masked, or withheld
     B-->>S: grounded answer
     S-->>U: final answer
 ```
@@ -227,19 +232,24 @@ sequenceDiagram
 **Ingestion (one-time / on document change):** S3 documents → Knowledge Base
 **Sync** → Bedrock chunks each markdown file → Titan V2 embeds each chunk →
 vectors written to the OpenSearch Serverless index. At query time the `retrieve`
-tool fetches the most relevant chunks and the specialist grounds its answer in
-them, reducing hallucination.
+tool (`agents/knowledge_base.py`) fetches up to 10 chunks scoring at least 0.4,
+screens them with the guardrail (`ApplyGuardrail`) when one is configured, and
+the specialist grounds its
+answer in the passages that pass, reducing hallucination. A failed search comes
+back to the specialist as a tool error, not as an empty result.
 
 ---
 
 ## 6. Security Model
 
 - **Guardrail on every call.** The Strands `BedrockModel` applies the Bedrock
-  Guardrail to every supervisor/specialist invocation — this enforces content and
-  PII policies on model input and output, and prompt-attack detection on input.
-  It doesn't
-  evaluate tool results, so retrieved knowledge-base text isn't screened, and
-  contextual grounding isn't evaluated.
+  Guardrail to every supervisor/specialist invocation — this enforces content
+  policies on model input and output, PII masking on output, and prompt-attack
+  detection on input.
+  It doesn't evaluate tool results, so when a guardrail is configured the
+  `retrieve` tool screens each retrieved passage itself with `ApplyGuardrail`,
+  withholding any the guardrail blocks. Account records from the other tools
+  aren't screened, and contextual grounding isn't evaluated.
 - **Account scoping is instructed, not enforced.** The system prompts instruct
   the agents to act only on the authenticated account and not recommend
   competitors, but a system prompt is a behavioral instruction, not a security
@@ -252,8 +262,9 @@ them, reducing hallucination.
   customer input into nested specialist agent loops, which is an inherent
   prompt-injection surface. It is mitigated by (a) the specialists' only tools
   being harmless in-memory mock data with no file/network/shell/exec sinks, and
-  (b) the guardrail's prompt-attack filter, which screens customer input, not
-  tool results such as retrieved knowledge-base text. **In production the
+  (b) the guardrail's prompt-attack filter. On model calls it screens customer
+  input, not tool results; the `retrieve` tool screens retrieved knowledge-base
+  passages itself, and account records stay unscreened. **In production the
   guardrail must be enabled** (`GUARDRAIL_ID` set) — injection resistance relies
   on it.
 - **IAM (runtime).** The principal running the agents needs
@@ -299,7 +310,8 @@ mature.
   published tariffs and policies.
 
 **Running cost (offsetting):** Bedrock model usage (Claude Opus 4.6 for routing +
-Claude Sonnet 4.6 for the specialists + Titan embeddings), OpenSearch Serverless
+Claude Sonnet 4.6 for the specialists + Titan embeddings), guardrail text units
+(model calls plus the `retrieve` tool's passage checks), OpenSearch Serverless
 OCUs, and S3 are small relative to the labour savings; the tiered model choice
 keeps the bulk of token volume on the cheaper Sonnet tier while reserving Opus for
 the single routing decision. On AgentCore Runtime, compute is billed for actual

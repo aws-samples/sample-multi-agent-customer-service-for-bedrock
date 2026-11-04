@@ -28,7 +28,8 @@ without changing code. See [Customise for your industry](#customise-for-your-ind
   agent, which is exposed to the supervisor as a callable tool.
 - **RAG grounding** — specialist answers grounded in policy/tariff documents via
   a Bedrock Knowledge Base (OpenSearch Serverless + Titan V2 embeddings), queried
-  with the Strands `retrieve` tool.
+  with a `retrieve` tool that screens each retrieved passage with the guardrail
+  (when one is configured).
 - **Responsible-AI guardrails** — a Bedrock Guardrail (content filters,
   sensitive-info redaction, denied topics, prompt-attack detection; contextual
   grounding configured but not evaluated) applied on **every** model invocation
@@ -255,13 +256,14 @@ supervisor and specialist model call, wired natively through the Strands
 > `GUARDRAIL_ID` is set; if it is unset the agents run **unguarded** (the demo
 > flags this with a sidebar warning). For any real deployment — and because the
 > agents-as-tools pattern's prompt-injection resistance relies on the
-> prompt-attack filter — treat `GUARDRAIL_ID` as **required**. The filter screens
-> customer input, not tool results such as retrieved knowledge-base text.
+> prompt-attack filter — treat `GUARDRAIL_ID` as **required**. On model calls the
+> filter screens customer input, not tool results; the `retrieve` tool screens
+> retrieved knowledge-base passages itself (account records stay unscreened).
 
 | Policy | Configuration |
 |---|---|
 | **Content filters** | HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT at HIGH (input + output); PROMPT_ATTACK at HIGH (input) |
-| **Sensitive info (redacted / ANONYMIZE)** | Phone, email, credit/debit card number + CVV + expiry, and UK sort code (regex) |
+| **Sensitive info (redacted / ANONYMIZE)** | Phone, email, credit/debit card number + CVV + expiry, and UK sort code (regex), masked in model output |
 | **Denied topics** | `FINANCIAL_ADVICE` (managed) |
 | **Contextual grounding** | GROUNDING + RELEVANCE filters at threshold 0.7: configured, but not evaluated in this sample (see [Guardrail design notes](#guardrail-design-notes)) |
 
@@ -290,7 +292,9 @@ A quick test — this is blocked by the prompt-attack filter:
   GROUNDING and RELEVANCE filters at threshold 0.7, but a grounding check needs
   the request to tag a grounding source and a query, and this sample's Converse
   calls don't: retrieved knowledge-base text reaches the model as a tool result,
-  which guardrails on Converse don't evaluate. So no grounding score is produced.
+  which guardrails on Converse don't evaluate. The `retrieve` tool's own screen
+  sends passages as input, and grounding is checked only on output. So no
+  grounding score is produced.
   The CDK construct version used here (generative-ai-cdk-constructs 0.1.318) also
   drops the filters' `action`, so the deployed filters don't get the requested
   `NONE`. AWS docs don't say what an omitted action does, so set the action
@@ -301,7 +305,10 @@ A quick test — this is blocked by the prompt-attack filter:
 
 Sensitive-info filters **redact (ANONYMIZE)** rather than **block**, so a turn
 that legitimately surfaces a phone number (e.g. an Ombudsman number from the
-Knowledge Base) is **delivered with the value masked** rather than refused.
+Knowledge Base) is **delivered with the value masked** rather than refused. The
+filters mask model output only: the stack sets each filter's `action`, which
+applies to responses, so customer input and retrieved passages reach the model
+unmasked and the masking happens on the way out.
 **Account numbers (`ACC-NNNNNN`) and UK postcodes are intentionally NOT filtered**
 (Bedrock regex filters support only ANONYMIZE or BLOCK — no detect-only mode — and
 the billing/scheduling flows depend on surfacing them). The filters are provided
@@ -311,10 +318,14 @@ the billing/scheduling flows depend on surfacing them). The filters are provided
 ### What the guardrail doesn't cover
 
 The guardrail screens the text messages sent to each model call and the text
-the model returns, and masks the PII it finds there. It doesn't cover:
+the model returns, and masks PII in the text the model returns. It doesn't
+cover:
 
 - **Tool results.** Guardrails on Converse don't evaluate `toolResult` content, so
-  account records and retrieved knowledge-base text reach the model unscreened.
+  account records reach the model unscreened. Retrieved knowledge-base text is the
+  exception: when a guardrail is configured, the `retrieve` tool
+  (`agents/knowledge_base.py`) screens each passage and its source with
+  `ApplyGuardrail` first and withholds any the guardrail blocks.
 - **Tool-call arguments.** Guardrails on Converse don't evaluate the `toolUse`
   input the model generates, so PII the model passes to a tool isn't masked.
 - **Bedrock model invocation logs.** This stack doesn't turn them on, but they're
@@ -480,8 +491,10 @@ For production, consider hardening the baseline configuration:
   the answer as `guard_content`. Set the filter action explicitly: `NONE` to measure, `BLOCK` to
   enforce. generative-ai-cdk-constructs 0.1.318 drops `action`, so add it with a
   property override on the guardrail's underlying `CfnGuardrail`.
-- **Retrieved content:** screen knowledge-base text with `ApplyGuardrail` before it
-  reaches the model, since guardrails on Converse don't evaluate tool results.
+- **Other tool results:** the `retrieve` tool screens knowledge-base passages with
+  `ApplyGuardrail`, since guardrails on Converse don't evaluate tool results. Do the
+  same for any other tool that returns text you don't control, such as free-text
+  notes from a CRM.
 - **Logs and traces:** before turning on Bedrock model invocation logging, create
   its log group with a KMS key, a retention period and a CloudWatch Logs data
   protection policy (masking isn't retroactive), and grant `logs:Unmask` only to
@@ -490,7 +503,10 @@ For production, consider hardening the baseline configuration:
   that bucket too. Do the same for the AgentCore runtime and
   `aws/spans` log groups.
 - **Sensitive-info:** enable the account-number / postcode regex filters
-  (ANONYMIZE) and add any industry-specific identifiers.
+  (ANONYMIZE) and add any industry-specific identifiers. To mask PII before the
+  model sees it (customer input and retrieved passages), also set each filter's
+  `inputAction` and `inputEnabled`; the construct version used here sets only
+  `action`, which applies to model output.
 - **Denied topics:** add custom denied topics tuned to your domain.
 - **Runtime:** deploy the agents to AgentCore Runtime (above) for scale, session
   isolation and managed tracing.
@@ -508,6 +524,7 @@ For production, consider hardening the baseline configuration:
 │   ├── supervisor.py                   # orchestrator (agents-as-tools)
 │   ├── specialists.py                  # billing / scheduling / escalation agents
 │   ├── tools.py                        # @tool functions (account, scheduling, tickets)
+│   ├── knowledge_base.py               # retrieve tool (Knowledge Base search + guardrail screening)
 │   ├── intent.py                       # keyword-scoring intent classifier (0.34 threshold)
 │   ├── config.py                       # runtime config + BedrockModel (guardrail) factory
 │   ├── mock_data.py                    # deterministic in-memory datastore (synthetic)
@@ -524,8 +541,10 @@ For production, consider hardening the baseline configuration:
 ## Security
 
 - The agents apply the Bedrock Guardrail on every model call — this enforces
-  content filtering and PII anonymization on model input and output, and
-  prompt-attack detection on input. It doesn't evaluate tool results or mask logs and traces; see
+  content filtering on model input and output, PII anonymization on output, and
+  prompt-attack detection on input. It doesn't evaluate tool results (the
+  `retrieve` tool screens knowledge-base passages itself) or mask logs and
+  traces; see
   [What the guardrail doesn't cover](#what-the-guardrail-doesnt-cover).
 - The system prompts **instruct** each agent to operate only within the
   authenticated customer's account. This is a behavioral instruction, not a

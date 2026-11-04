@@ -115,17 +115,10 @@ def load_config() -> RuntimeConfig:
         (``US``/``EU``/``APAC``).
 
     Returns:
-        The resolved :class:`RuntimeConfig`. The resolved KB id is also
-        exported to ``KNOWLEDGE_BASE_ID``, which the community ``retrieve`` tool
-        requires, and to ``STRANDS_KNOWLEDGE_BASE_ID``. When ``AWS_REGION`` is
-        unset, the resolved region is exported to it too.
+        The resolved :class:`RuntimeConfig`. The Knowledge Base id and region are
+        passed to the ``retrieve`` tool explicitly (:mod:`agents.knowledge_base`).
     """
     region = (os.environ.get("AWS_REGION") or DEFAULT_REGION).strip()
-    # The community `retrieve` tool falls back to us-west-2 when AWS_REGION is
-    # unset; export the resolved region so retrieval uses the same region as the
-    # model calls.
-    if not os.environ.get("AWS_REGION"):
-        os.environ["AWS_REGION"] = region
 
     geo_override = (os.environ.get("INFERENCE_PROFILE_GEO") or "").strip().upper()
     geo_key = geo_override if geo_override in _VALID_GEOS else detect_geo(region)
@@ -160,11 +153,6 @@ def load_config() -> RuntimeConfig:
         or os.environ.get("KNOWLEDGE_BASE_ID")
         or ""
     ).strip()
-    # The community `retrieve` tool reads KNOWLEDGE_BASE_ID at call time.
-    if kb_id:
-        os.environ["KNOWLEDGE_BASE_ID"] = kb_id
-        os.environ["STRANDS_KNOWLEDGE_BASE_ID"] = kb_id
-
     config = RuntimeConfig(
         region=region,
         supervisor_model_id=_profile_id(supervisor_base, geo_key),
