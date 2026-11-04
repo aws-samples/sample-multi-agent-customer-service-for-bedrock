@@ -82,8 +82,13 @@ the environment.
 streamlit run app.py
 ```
 
-Streamlit opens the app (default <http://localhost:8501>). Confirm the sidebar
+Streamlit opens the app at <http://localhost:8501>. Confirm the sidebar
 configuration is populated, then start chatting.
+
+The demo listens on `127.0.0.1` only (`demo/.streamlit/config.toml`), because it
+calls Amazon Bedrock with your AWS credentials. Run it from `demo/` so Streamlit
+picks up that file. To use it from another machine, forward the port over SSH
+(`ssh -L 8501:127.0.0.1:8501 <host>`) rather than binding to other interfaces.
 
 ---
 
