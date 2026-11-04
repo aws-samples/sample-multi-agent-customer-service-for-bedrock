@@ -178,7 +178,9 @@ The stack emits these CloudFormation outputs: `KnowledgeBaseId`, `GuardrailId`,
 
 > **Cost note.** The Knowledge Base vector store uses **Amazon OpenSearch
 > Serverless**, which bills a **continuous minimum-OCU charge** while the
-> collection exists — the dominant standing cost. Run `npx aws-cdk destroy` when
+> collection exists — the dominant standing cost. The VPC endpoint the stack
+> creates for the collection (see [Security](#security)) adds a smaller hourly
+> AWS PrivateLink charge, and a Route 53 private hosted zone for its DNS. Run `npx aws-cdk destroy` when
 > you are not using the sample (everything uses `RemovalPolicy.DESTROY`).
 
 ### 2. Sync the Knowledge Base
@@ -295,11 +297,10 @@ A quick test — this is blocked by the prompt-attack filter:
   which guardrails on Converse don't evaluate. The `retrieve` tool's own screen
   sends passages as input, and grounding is checked only on output. So no
   grounding score is produced.
-  The CDK construct version used here (generative-ai-cdk-constructs 0.1.318) also
-  drops the filters' `action`, so the deployed filters don't get the requested
-  `NONE`. AWS docs don't say what an omitted action does, so set the action
-  explicitly if you make grounding run (see
-  [Production hardening](#production-hardening)).
+  The CDK construct version used here (generative-ai-cdk-constructs 0.1.318)
+  drops the filters' `action`, so the stack sets it to `NONE` with a property
+  override: if you make grounding run, it measures without blocking until you
+  change it to `BLOCK` (see [Production hardening](#production-hardening)).
 
 ### Guardrail PII tradeoff
 
@@ -488,9 +489,8 @@ For production, consider hardening the baseline configuration:
 - **Contextual grounding:** to make grounding run, check each RAG answer with
   `ApplyGuardrail` and `source="OUTPUT"` (grounding is checked only on output),
   tagging the retrieved text as `grounding_source`, the question as `query` and
-  the answer as `guard_content`. Set the filter action explicitly: `NONE` to measure, `BLOCK` to
-  enforce. generative-ai-cdk-constructs 0.1.318 drops `action`, so add it with a
-  property override on the guardrail's underlying `CfnGuardrail`.
+  the answer as `guard_content`. The stack sets the filters' action to `NONE`
+  (measure); change it to `BLOCK` in `_create_guardrail` to enforce.
 - **Other tool results:** the `retrieve` tool screens knowledge-base passages with
   `ApplyGuardrail`, since guardrails on Converse don't evaluate tool results. Do the
   same for any other tool that returns text you don't control, such as free-text
@@ -552,6 +552,13 @@ For production, consider hardening the baseline configuration:
   be enforced deterministically at the tool/IAM layer; see
   [Production hardening](#production-hardening).
 - S3 bucket blocks public access, enforces TLS, uses SSE-S3.
+- The Knowledge Base's OpenSearch Serverless collection has no public network
+  access. Bedrock reaches it through AWS service private access, and the Lambda
+  function that creates the vector index reaches it through an OpenSearch
+  Serverless VPC endpoint, in a VPC with no internet access. OpenSearch
+  Dashboards access is off. The construct library allows public access by
+  default, so the stack overrides its network policy
+  (`_make_vector_collection_private`).
 - The mock datastore is in-memory and synthetic — no real customer data.
 - Default resource encryption and `RemovalPolicy.DESTROY` are used for easy
   teardown; run `npx aws-cdk destroy` when idle to avoid standing OpenSearch

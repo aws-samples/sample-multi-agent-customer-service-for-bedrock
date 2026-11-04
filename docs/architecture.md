@@ -275,6 +275,12 @@ back to the specialist as a tool error, not as an empty result.
 - **Knowledge Base role (CDK).** A dedicated role grants the Knowledge Base read
   access to the S3 bucket and read/write to the OpenSearch Serverless collection;
   the OpenSearch data-access policy is scoped to that role.
+- **Vector store network access.** The OpenSearch Serverless collection has no
+  public network access: Bedrock reaches it through AWS service private access
+  (`SourceServices: bedrock.amazonaws.com`), and the index-creation Lambda
+  through an OpenSearch Serverless VPC endpoint in a VPC with no internet gateway
+  or NAT. Its security groups allow only HTTPS from the Lambda to the endpoint.
+  The collection is encrypted with an AWS owned key.
 - **S3 hardening.** The docs bucket blocks all public access, uses SSE-S3
   encryption, and (for easy demo teardown) `removal_policy = DESTROY` +
   `auto_delete_objects = True`.
