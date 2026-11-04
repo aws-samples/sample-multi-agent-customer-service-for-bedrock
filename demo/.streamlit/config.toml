@@ -1,0 +1,7 @@
+# Serve the demo on this machine only. The app calls Amazon Bedrock with your
+# AWS credentials, so don't expose it to your network. To use it from another
+# machine, forward the port over SSH: ssh -L 8501:127.0.0.1:8501 <host>
+# Streamlit reads this file when you run `streamlit run app.py` from demo/.
+[server]
+address = "127.0.0.1"
+port = 8501
